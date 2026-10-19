@@ -2097,7 +2097,7 @@ function viewOverview() {
   const oldNT = notTransferred.filter(c => daysBetween(c.date, DB.today) > 14);
 
   const attention = [];
-  { const due = dueAccruals().filter(a => canSee(asset(a.assetId).groupId)); if (due.length) attention.push({ dot: 'blue', text: `${due.length} ${due.length === 1 ? 'начисление наступило' : due.length < 5 ? 'начисления наступили' : 'начислений наступило'} (${fmtKg(sum(due, a => a.planMass))}) — исполнит планировщик А31 · <a class="ref" data-act="runSchedule">исполнить сейчас</a> · <a class="ref" data-act="setToday">сдвинуть дату</a>` }); }
+  { const due = dueAccruals().filter(a => canSee(asset(a.assetId).groupId)); if (due.length) attention.push({ dot: 'blue', text: `${due.length} ${due.length === 1 ? 'начисление наступило' : due.length < 5 ? 'начисления наступили' : 'начислений наступило'} (${fmtKg(sum(due, a => a.planMass))}) — исполнит планировщик А31 · <a class="ref" data-act="setToday">сдвинуть дату</a>` }); }
   waiting.forEach(a => attention.push({ dot: 'red', text: `Финальное начисление ${a.metal} по лоту ${refLink('lot', a.lotId)} ждёт подтверждения итоговых показателей (плановая дата ${fmtD(a.planDate)} прошла)` }));
   arbLots.forEach(l => attention.push({ dot: 'amber', text: `Лот ${refLink('lot', l.id)}: расхождение химии выше порога — требуется арбитраж, итоговые показатели не подтверждены` }));
   overduePays.forEach(p => attention.push({ dot: 'amber', text: `Оплата ${refLink('payment', p.id)} по контракту ${refLink('contract', p.contractId)} (${esc(client(deal(p.dealId).clientId).name)}) просрочена: план ${fmtD(p.planDate)}, ${fmtUsd(p.planUSD)}` }));
@@ -2487,8 +2487,8 @@ function formEditOurChem(l) {
 function viewAccruals() {
   return listPage({
     id: 'accr', title: 'Начисления', titleExtra: stage('mvp1'), subtitle: 'Плановые и фактические зачисления металла на учётный счёт переработчика. Исполненное начисление = одна транзакция УМС.',
-    actions: `<button class="btn primary" data-act="runSchedule" ${dueAccruals().filter(a => canSee(a.assetId ? asset(a.assetId).groupId : null)).length ? '' : 'disabled title="Наступивших начислений нет — сдвиньте учётную дату"'}>Исполнить наступившие · ${dueAccruals().length} ${stage('mvp2', 'А31 · расписание')}</button><button class="btn" data-act="setToday">Сдвинуть учётную дату</button>`,
-    note: `<div class="note info small">В плановую дату начисление исполняет планировщик (А31) — металл появляется на счёте УМС сам. В прототипе время не идёт: «Исполнить наступившие» имитирует запуск планировщика, «Сдвинуть учётную дату» — ход времени. Ручное исполнение в карточке — для досрочного зачисления по выписке завода или режима MVP-1.</div>`,
+    actions: `<button class="btn" data-act="setToday">Сдвинуть учётную дату</button>`,
+    note: `<div class="note info small">В плановую дату начисление исполняет планировщик (А31) — металл появляется на счёте УМС сам, без участия сотрудника. В прототипе время не идёт само: «Сдвинуть учётную дату» (или клик по дате в шапке) имитирует ход времени, и всё наступившее исполняется. Ручное исполнение в карточке — только для досрочного зачисления по выписке завода или режима MVP-1.</div>`,
     rows: vis.accruals(), search: r => [r.id, r.lotId, assetName(r.assetId), procName(r.procId)].join(' '),
     filters: [{ key: 'status', label: 'Статус', options: opt(['Планируется', 'Исполнено', 'Отменено']), get: r => r.status }, { key: 'metal', label: 'Металл', options: optMetals(), get: r => r.metal }, { key: 'type', label: 'Тип', options: [{ value: 'prelim', label: 'предварительное' }, { value: 'final', label: 'финальное' }], get: r => r.type }, { key: 'asset', label: 'Актив', options: optAssets(), get: r => r.assetId }],
     quick: [{ key: 'wait', label: 'Ожидает итоговых показателей', test: isWaitingFinal }, { key: 'neg', label: 'Отрицательные', test: r => (r.factMass != null && r.factMass < 0) || (r.calcMass != null && r.calcMass < 0) }],
@@ -2632,9 +2632,9 @@ function formSetToday() {
   const next = DB.accruals.filter(a => a.status === 'Планируется' && a.planDate > DB.today).map(a => a.planDate).sort()[0];
   openForm({ title: 'Сдвинуть учётную дату', tag: stage('proto'),
     note: `<div class="note info">В реальной системе «сегодня» идёт само, а планировщик (А31) в плановую дату исполняет начисления. В прототипе время стоит на ${fmtD(DB.today)}: сдвиньте дату вперёд — и всё, что наступило, исполнится автоматически, металл появится на счетах УМС. Назад вернуть можно только «Сбросить данные».</div>`,
-    fields: [{ name: 'date', label: 'Новая учётная дата', type: 'date', value: next || addDays(DB.today, 7), min: DB.today, required: true, hint: next ? 'ближайшее плановое начисление — ' + fmtD(next) : 'плановых начислений впереди нет' }],
+    fields: [{ name: 'date', label: 'Новая учётная дата', type: 'date', value: DB.today, min: DB.today, required: true, hint: next ? 'ближайшее плановое начисление — ' + fmtD(next) : 'плановых начислений впереди нет' }],
     live: v => { const d = due(v.date || DB.today); return `<div class="lr"><span>Будет исполнено начислений</span><b>${d.length}</b></div>${METALS.map(m => { const dm = d.filter(a => a.metal === m); return dm.length ? `<div class="lr"><span>${m}</span><b>${fmtKg(sum(dm, a => a.planMass))}</b></div>` : ''; }).join('')}`; },
-    submit: v => { const n = setToday(v.date); toast(`Учётная дата — ${fmtD(v.date)}. Планировщик исполнил начислений: ${n}`, 'ok', 6000); }, submitLabel: 'Сдвинуть' });
+    submit: v => { if (v.date === DB.today) throw new Error('Выберите дату позже текущей учётной.'); const n = setToday(v.date); toast(`Учётная дата — ${fmtD(v.date)}. Планировщик исполнил начислений: ${n}`, 'ok', 6000); }, submitLabel: 'Сдвинуть' });
 }
 
 function formResetData() {
