@@ -302,17 +302,17 @@ body.theme-elma{
   --accent:#2f5f8f;--accent-h:#264d75;--accent-bg:#e6f0fa;
   --green:#1f2937;--green-bg:transparent;--amber:#1f2937;--amber-bg:transparent;
   --red:#c0392b;--red-bg:transparent;--grey-bg:#f3f5f8;--violet:#1f2937;--violet-bg:transparent;
-  --side-w:390px;--top-h:72px;--radius:4px;
+  --side-w:350px;--top-h:64px;--radius:4px;
   --font:-apple-system,"SF Pro Text",Inter,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
   --e-navy:#1d3a5c;--e-navy2:#2d5a86;--e-menu:#eef2f7;--e-menu-on:#dde7f1;--e-link:#2a64a8;
-  font-size:15px;
+  font-size:14px;
 }
 body.theme-elma a,body.theme-elma .ref{color:var(--e-link)}
 /* ---- шапка ---- */
 body.theme-elma #top{background:#fff;border-bottom:1px solid var(--line);padding:0 28px 0 24px;gap:18px}
 body.theme-elma #top .logo{display:none}
 body.theme-elma #top .search{flex:1 1 auto;max-width:none}
-body.theme-elma #top .search input{height:44px;border-radius:4px;background:#fff;font-size:15px;border:1px solid var(--line2);padding-left:14px}
+body.theme-elma #top .search input{height:38px;border-radius:4px;background:#fff;font-size:14px;border:1px solid var(--line2);padding-left:14px}
 body.theme-elma #top .search input::placeholder{color:#9aa3ad}
 body.theme-elma #top .search .ico{display:none}
 body.theme-elma #top select{height:40px;border-radius:4px;font-size:14px;border-color:var(--line2);background:#fff}
@@ -323,23 +323,24 @@ body.theme-elma #top .user{display:flex;align-items:center;gap:10px}
 body.theme-elma #top .user .uinfo{display:flex;flex-direction:column;line-height:1.15}
 body.theme-elma #top .user .uinfo b{font-size:15px;color:var(--e-link);font-weight:500}
 body.theme-elma #top .user .uinfo small{font-size:12.5px;color:var(--muted)}
-body.theme-elma #top .help{width:36px;height:36px;border-radius:50%;border:2px solid var(--e-link);color:var(--e-link);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:16px;flex:none}
+body.theme-elma #top .help{width:36px;height:36px;border-radius:50%;border:2px solid var(--e-link);color:var(--e-link);display:flex;align-items:center;justify-content:center;font-weight:600;font-size:16px;flex:none;cursor:pointer;text-decoration:none;border-bottom:2px solid var(--e-link)}
+body.theme-elma #top .help:hover{background:var(--e-link);color:#fff}
 body.theme-elma #top .sync{display:none}
 /* ---- двухуровневое меню ---- */
 body.theme-elma #side{display:flex;padding:0;border-right:0;overflow:visible}
-body.theme-elma .rail{width:90px;flex:none;background:var(--e-navy);display:flex;flex-direction:column;min-height:100%}
-body.theme-elma .rail .rlogo{height:72px;display:flex;align-items:center;justify-content:center;background:var(--e-navy)}
+body.theme-elma .rail{width:84px;flex:none;background:var(--e-navy);display:flex;flex-direction:column;min-height:100%}
+body.theme-elma .rail .rlogo{height:64px;display:flex;align-items:center;justify-content:center;background:var(--e-navy)}
 body.theme-elma .rail .rlogo span{width:40px;height:40px;border-radius:50%;border:5px solid #fff;border-top-color:#e9502a;border-right-color:#f5b400;border-bottom-color:#2ea84f;border-left-color:#2a7ad8;color:transparent;font-size:0;box-sizing:border-box}
-body.theme-elma .rail a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;height:80px;color:#fff;text-decoration:none;font-size:11.5px;position:relative;text-align:center;padding:0 4px;line-height:1.15;border-top:1px solid rgba(255,255,255,.06)}
-body.theme-elma .rail a svg{width:26px;height:26px;stroke-width:1.5}
+body.theme-elma .rail a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;height:68px;color:#fff;text-decoration:none;font-size:11.5px;position:relative;text-align:center;padding:0 4px;line-height:1.15;border-top:1px solid rgba(255,255,255,.06)}
+body.theme-elma .rail a svg{width:22px;height:22px;stroke-width:1.5}
 body.theme-elma .rail a.on{background:var(--e-navy2)}
 body.theme-elma .rail a:hover{background:#27496e;text-decoration:none}
 body.theme-elma .rail a .cnt{position:absolute;top:10px;left:50px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;background:#e0282e;color:#fff;font-size:10px;display:flex;align-items:center;justify-content:center}
 body.theme-elma .rail .rfoot{margin-top:auto;height:56px;display:flex;align-items:center;justify-content:center;color:#9fb3c8}
-body.theme-elma .secmenu{width:300px;flex:none;background:var(--e-menu);border-right:1px solid #e1e7ee}
-body.theme-elma .secmenu .sechead{height:72px;display:flex;align-items:center;justify-content:space-between;padding:0 16px 0 22px;font-size:22px;font-weight:700;color:#1f2937}
+body.theme-elma .secmenu{width:266px;flex:none;background:var(--e-menu);border-right:1px solid #e1e7ee}
+body.theme-elma .secmenu .sechead{height:64px;display:flex;align-items:center;justify-content:space-between;padding:0 14px 0 20px;font-size:20px;font-weight:700;color:#1f2937}
 body.theme-elma .secmenu .sechead::after{content:"«";width:36px;height:36px;border:1px solid #cfd6de;border-radius:4px;background:#fff;color:var(--e-link);display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:400}
-body.theme-elma .secmenu a.item{display:flex;align-items:center;gap:12px;height:48px;padding:0 16px 0 22px;color:#1f2937;text-decoration:none;font-size:15.5px;border-left:0}
+body.theme-elma .secmenu a.item{display:flex;align-items:center;gap:10px;height:40px;padding:0 14px 0 20px;color:#1f2937;text-decoration:none;font-size:14.5px;border-left:0}
 body.theme-elma .secmenu a.item svg{width:20px;height:20px;opacity:1;stroke-width:1.6;color:#55657a}
 body.theme-elma .secmenu a.item:hover{background:#e6edf4}
 body.theme-elma .secmenu a.item.active{background:var(--e-menu-on);color:var(--e-link);font-weight:500}
@@ -347,20 +348,20 @@ body.theme-elma .secmenu a.item.active svg{color:var(--e-link)}
 body.theme-elma .secmenu a.item .muted{margin-left:auto;font-size:13px;color:#6b7280}
 body.theme-elma .secmenu .divider{display:flex;align-items:center;gap:6px;height:36px;padding:8px 22px 0;font-size:12px;letter-spacing:.03em;color:#7d8b99;text-transform:uppercase}
 /* ---- страница ---- */
-body.theme-elma #main{padding:0 28px 48px;background:#fff}
-body.theme-elma .ph{margin:0 -28px 18px;padding:22px 28px 16px;border-bottom:1px solid var(--line)}
-body.theme-elma h1{font-size:24px;font-weight:700;color:#1f2937}
-body.theme-elma .ph .sub{color:#6b7280;font-size:14px;margin-top:4px}
+body.theme-elma #main{padding:0 22px 40px;background:#fff}
+body.theme-elma .ph{margin:0 -22px 14px;padding:14px 22px 12px;border-bottom:1px solid var(--line)}
+body.theme-elma h1{font-size:21px;font-weight:700;color:#1f2937}
+body.theme-elma .ph .sub{color:#6b7280;font-size:13px;margin-top:2px}
 body.theme-elma .ph .crumbs{font-size:13px;color:#6b7280}
-body.theme-elma .btn{border-radius:4px;height:44px;padding:0 18px;border:1px solid #2f5f8f;color:#2f5f8f;font-weight:500;background:#fff;font-size:15px}
+body.theme-elma .btn{border-radius:4px;height:38px;padding:0 14px;border:1px solid #2f5f8f;color:#2f5f8f;font-weight:500;background:#fff;font-size:14px}
 body.theme-elma .btn:hover{background:#f1f6fb}
 body.theme-elma .btn:disabled{border-color:#cfd6de;color:#9aa3ad;background:#fff}
 body.theme-elma .btn.primary{background:#2f5f8f;border-color:#2f5f8f;color:#fff}
 body.theme-elma .btn.primary:hover{background:#264d75}
 body.theme-elma .btn.danger{color:#c0392b;border-color:#c0392b}
-body.theme-elma .btn.sm{height:36px;padding:0 14px;font-size:14px}
+body.theme-elma .btn.sm{height:32px;padding:0 12px;font-size:13.5px}
 body.theme-elma .btn-group{border-radius:4px;border-color:#cfd6de}
-body.theme-elma .btn-group .btn{border:0;height:40px}
+body.theme-elma .btn-group .btn{border:0;height:36px}
 body.theme-elma .btn-group .btn.on{background:#e6edf4;color:#1f2937}
 body.theme-elma .menu{border-radius:4px;box-shadow:0 4px 16px rgba(0,0,0,.12);font-size:15px;min-width:280px}
 body.theme-elma .menu div{padding:10px 16px}
@@ -379,32 +380,32 @@ body.theme-elma .panel .pt{margin-bottom:10px}
 body.theme-elma .panel .pt h2{font-size:15px;font-weight:400;color:#6b7280}
 body.theme-elma .panel .pt .muted.small{display:none}
 body.theme-elma .fields{display:block}
-body.theme-elma .f{display:grid;grid-template-columns:240px 1fr;gap:10px 16px;border-bottom:0;padding:9px 0;align-items:baseline}
-body.theme-elma .f .l{font-size:15px;color:#6b7280;margin:0;text-transform:none;letter-spacing:0}
-body.theme-elma .f .v{font-size:15px;color:#1f2937}
+body.theme-elma .f{display:grid;grid-template-columns:200px 1fr;gap:6px 14px;border-bottom:0;padding:4px 0;align-items:baseline}
+body.theme-elma .f .l{font-size:13.5px;color:#6b7280;margin:0;text-transform:none;letter-spacing:0}
+body.theme-elma .f .v{font-size:13.5px;color:#1f2937}
 body.theme-elma .f .v.big{font-size:15px;font-weight:500}
 body.theme-elma .f .v .muted{color:#9aa3ad}
 body.theme-elma .fields.c4{grid-template-columns:1fr}
-body.theme-elma .kpi{border:1px solid var(--line);border-radius:4px;border-left:1px solid var(--line)!important;padding:12px 16px;min-height:0;background:#fff}
+body.theme-elma .kpi{border:1px solid var(--line);border-radius:4px;border-left:1px solid var(--line)!important;padding:10px 14px;min-height:0;background:#fff}
 body.theme-elma .kpi .kl{font-size:13.5px;color:#6b7280}
-body.theme-elma .kpi .kv{font-size:18px;font-weight:600}
+body.theme-elma .kpi .kv{font-size:17px;font-weight:600}
 body.theme-elma .kpi .ks{font-size:13.5px}
 body.theme-elma .bar{display:none}
-body.theme-elma .note{background:#fff;border:1px solid var(--line2);color:#1f2937;border-radius:4px;font-size:14px}
+body.theme-elma .note{background:#fff;border:1px solid var(--line2);color:#1f2937;border-radius:4px;font-size:13px;padding:7px 10px}
 body.theme-elma .note.err{color:#c0392b;border-color:#c0392b}
 body.theme-elma .note.info{background:#eef4fa;border-color:#d6e3f1}
 body.theme-elma .inline-kpi{gap:28px}
-body.theme-elma .inline-kpi b{font-size:15px;font-weight:600}
-body.theme-elma .toolbar input[type=text],body.theme-elma .toolbar select{height:44px;border-radius:4px;font-size:15px;border-color:var(--line2)}
-body.theme-elma .toolbar .chip{background:#fff;border:1px solid var(--line2);color:#2f5f8f;border-radius:4px;height:36px;font-size:14px}
+body.theme-elma .inline-kpi b{font-size:14px;font-weight:600}
+body.theme-elma .toolbar input[type=text],body.theme-elma .toolbar select{height:36px;border-radius:4px;font-size:14px;border-color:var(--line2)}
+body.theme-elma .toolbar .chip{background:#fff;border:1px solid var(--line2);color:#2f5f8f;border-radius:4px;height:32px;font-size:13px}
 body.theme-elma .toolbar .cnt{font-size:14px;color:#6b7280}
 /* таблицы — как в ELMA: карточка с рамкой, крупные строки, ссылки синие */
 body.theme-elma .tbl-wrap{border:1px solid var(--line);border-radius:4px;background:#fff}
-body.theme-elma table.tbl{font-size:15px}
-body.theme-elma table.tbl th{background:#f9fafb;color:#1f2937;font-weight:600;font-size:15px;border-bottom:1px solid var(--line);padding:16px 16px;text-transform:none;letter-spacing:0}
-body.theme-elma table.tbl td{padding:17px 16px;border-bottom:1px solid var(--line)}
-body.theme-elma table.tbl.compact th{padding:12px 14px;font-size:14px}
-body.theme-elma table.tbl.compact td{padding:12px 14px;font-size:14px}
+body.theme-elma table.tbl{font-size:13px}
+body.theme-elma table.tbl th{background:#f9fafb;color:#1f2937;font-weight:600;font-size:12.5px;border-bottom:1px solid var(--line);padding:8px 10px;text-transform:none;letter-spacing:0}
+body.theme-elma table.tbl td{padding:7px 10px;border-bottom:1px solid var(--line)}
+body.theme-elma table.tbl.compact th{padding:6px 8px;font-size:12px}
+body.theme-elma table.tbl.compact td{padding:5px 8px;font-size:12.5px}
 body.theme-elma table.tbl tbody tr.row:hover{background:#f6f9fc}
 body.theme-elma table.tbl tr.hl td{background:transparent}
 body.theme-elma table.tbl tr.dim td{color:#1f2937}
@@ -416,7 +417,7 @@ body.theme-elma .rowacts a.neg{color:#c0392b}
 body.theme-elma .empty-state{border-radius:4px;background:#f9fafb}
 /* вкладки */
 body.theme-elma .tabs{border-bottom:1px solid var(--line)}
-body.theme-elma .tabs a{font-size:15px;padding:12px 18px;color:#1f2937}
+body.theme-elma .tabs a{font-size:14px;padding:9px 14px;color:#1f2937}
 body.theme-elma .tabs a.on{color:var(--e-link);border-bottom-color:var(--e-link)}
 body.theme-elma .tabs a .cnt{background:none;color:#6b7280;padding:0;margin-left:6px}
 /* канбан */
@@ -427,24 +428,24 @@ body.theme-elma .kcard .kt{color:var(--e-link)}
 /* ---- модальные окна и формы ---- */
 body.theme-elma .overlay{background:rgba(31,41,55,.5)}
 body.theme-elma .modal{border-radius:4px;width:min(1180px,96vw);box-shadow:0 16px 48px rgba(0,0,0,.25)}
-body.theme-elma .modal .mh{padding:22px 32px 18px;border-bottom:1px solid var(--line)}
+body.theme-elma .modal .mh{padding:16px 28px 14px;border-bottom:1px solid var(--line)}
 body.theme-elma .modal .mh h2{font-size:21px;font-weight:600}
 body.theme-elma .modal .mh .x{font-size:22px;color:#6b7280}
-body.theme-elma .modal .mb{padding:22px 32px}
+body.theme-elma .modal .mb{padding:18px 28px}
 body.theme-elma .form{display:block}
-body.theme-elma .form .fld{display:grid;grid-template-columns:240px 1fr;gap:6px 16px;align-items:center;margin-bottom:12px}
+body.theme-elma .form .fld{display:grid;grid-template-columns:220px 1fr;gap:6px 16px;align-items:center;margin-bottom:10px}
 body.theme-elma .form .fld.full{grid-column:1/-1}
 body.theme-elma .form .fld.full label{grid-column:1}
-body.theme-elma .form label{font-size:15px;color:#1f2937}
+body.theme-elma .form label{font-size:14px;color:#1f2937}
 body.theme-elma .form label .req{color:#e0282e}
 body.theme-elma .form .hint{grid-column:2;margin-top:-4px;font-size:13px;color:#6b7280}
-body.theme-elma .form input,body.theme-elma .form select,body.theme-elma .form textarea{border-radius:4px;height:44px;border:1px solid var(--line2);font-size:15px;padding:0 14px;background:#fff}
+body.theme-elma .form input,body.theme-elma .form select,body.theme-elma .form textarea{border-radius:4px;height:38px;border:1px solid var(--line2);font-size:14px;padding:0 14px;background:#fff}
 body.theme-elma .form input:focus,body.theme-elma .form select:focus,body.theme-elma .form textarea:focus{border-color:#2f5f8f;box-shadow:none;outline:none}
 body.theme-elma .form textarea{height:96px;padding:10px 14px}
 body.theme-elma .form .sect{color:#1f2937;text-transform:none;letter-spacing:0;font-size:15px;font-weight:600;grid-column:1/-1;margin:8px 0 4px}
 body.theme-elma .form .chk-row{grid-column:2}
 body.theme-elma .live{background:#f9fafb;border:1px solid var(--line);border-radius:4px;font-size:14px;margin-top:6px}
-body.theme-elma .modal .mf{padding:18px 32px 22px;border-top:1px solid var(--line);justify-content:flex-start;flex-direction:row-reverse;gap:10px}
+body.theme-elma .modal .mf{padding:14px 28px 16px;border-top:1px solid var(--line);justify-content:flex-start;flex-direction:row-reverse;gap:10px}
 body.theme-elma .modal .mf .left{margin-right:0;margin-left:auto;font-size:13px}
 body.theme-elma .toast{border-radius:4px}
 body.theme-elma #side .after-block{background:transparent;border:0;margin:0;padding:0}
@@ -452,29 +453,29 @@ body.theme-elma .att li .dot{background:#6b7280}
 body.theme-elma .tl li .d{color:#6b7280}
 /* ---- карточка-окно ---- */
 body.theme-elma .card-overlay{background:rgba(31,41,55,.55);padding:14px}
-body.theme-elma .card-win{border-radius:4px;box-shadow:0 12px 40px rgba(0,0,0,.25);width:min(1600px,100%);height:min(96vh,100%);grid-template-columns:1fr 410px}
+body.theme-elma .card-win{border-radius:4px;box-shadow:0 12px 40px rgba(0,0,0,.25);width:min(1600px,100%);height:min(96vh,100%);grid-template-columns:1fr 360px}
 body.theme-elma .card-main{padding:0 32px 32px}
-body.theme-elma .card-main .ph{margin:0 -32px 14px;padding:22px 90px 16px 32px;border-bottom:1px solid var(--line)}
-body.theme-elma .card-main h1{font-size:21px;font-weight:600}
+body.theme-elma .card-main .ph{margin:0 -32px 12px;padding:16px 90px 12px 32px;border-bottom:1px solid var(--line)}
+body.theme-elma .card-main h1{font-size:19px;font-weight:600}
 body.theme-elma .card-main .ph .sub{font-size:14px}
 body.theme-elma .card-x{top:18px;right:24px;font-size:22px;color:#6b7280}
 body.theme-elma .card-icons{position:absolute;top:18px;right:70px;display:flex;gap:18px;color:var(--e-link);z-index:2}
 body.theme-elma .card-icons svg{width:22px;height:22px;stroke-width:1.6;cursor:pointer;opacity:.9}
-body.theme-elma .card-side{background:#fff;border-left:1px solid var(--line);padding:22px 28px 20px}
+body.theme-elma .card-side{background:#fff;border-left:1px solid var(--line);padding:18px 22px 18px}
 body.theme-elma .sp-block{margin-bottom:0;padding:0 0 22px;border-bottom:1px solid var(--line);margin-bottom:22px}
 body.theme-elma .sp-block:last-child{border-bottom:0}
-body.theme-elma .sp-h{font-size:17px;font-weight:400;color:#1f2937;margin-bottom:14px}
+body.theme-elma .sp-h{font-size:15.5px;font-weight:400;color:#1f2937;margin-bottom:14px}
 body.theme-elma .sp-h::after{content:"⌃";margin-left:auto;color:#6b7280;font-size:14px}
 body.theme-elma .sp-h .muted.small{display:none}
 body.theme-elma .sp-h .sp-add{margin-left:0;order:3;display:inline-flex;align-items:center;height:40px;padding:0 16px;border:1px solid #2f5f8f;border-radius:4px;color:#2f5f8f;font-size:15px;font-weight:400}
 body.theme-elma .sp-h:has(.sp-add){flex-wrap:wrap}
 body.theme-elma .sp-h .sp-add::before{content:"+ ";margin-right:4px}
-body.theme-elma .sp-status{border-radius:4px;height:48px;background:#e6f0fa;border:0;font-size:16px;padding:0 14px;color:#1f2937;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%232a64a8' stroke-width='2'%3E%3Cpath d='M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center}
-body.theme-elma .sp-status-txt{background:#e6f0fa;border-radius:4px;padding:14px;font-size:16px}
+body.theme-elma .sp-status{border-radius:4px;height:42px;background:#e6f0fa;border:0;font-size:15px;padding:0 14px;color:#1f2937;appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%232a64a8' stroke-width='2'%3E%3Cpath d='M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center}
+body.theme-elma .sp-status-txt{background:#e6f0fa;border-radius:4px;padding:11px 14px;font-size:15px}
 body.theme-elma .sp-sub{font-size:13px;color:#6b7280}
-body.theme-elma .sp-task{font-size:14.5px;border-bottom:0;padding:8px 0}
-body.theme-elma .sp-msg{font-size:14.5px;border-bottom:0;padding:10px 0}
-body.theme-elma .sp-msg .avatar{width:40px;height:40px;background:#2f5f8f;color:#fff;font-size:14px}
+body.theme-elma .sp-task{font-size:13.5px;border-bottom:0;padding:8px 0}
+body.theme-elma .sp-msg{font-size:13.5px;border-bottom:0;padding:10px 0}
+body.theme-elma .sp-msg .avatar{width:34px;height:34px;background:#2f5f8f;color:#fff;font-size:14px}
 body.theme-elma .sp-msg .avatar.sys{background:#fff;border:2px solid #e5e9ef;color:#2f5f8f}
 body.theme-elma .sp-who{font-weight:400;font-size:15px}
 body.theme-elma .sp-who .muted{display:block;font-size:13px}
@@ -482,7 +483,7 @@ body.theme-elma .sp-txt{margin-top:4px}
 body.theme-elma .sp-dot{background:#6b7280}
 body.theme-elma .sp-compose{display:flex;gap:8px;margin-bottom:8px}
 body.theme-elma .sp-compose textarea{border-radius:4px;height:48px;border:1px solid var(--line2);font-size:15px;padding:12px 14px;flex:1}
-body.theme-elma .card-foot{background:#fff;border-top:1px solid var(--line);padding:18px 32px}
+body.theme-elma .card-foot{background:#fff;border-top:1px solid var(--line);padding:12px 32px}
 body.theme-elma .card-foot .menu-wrap .menu{bottom:50px}
 /* прочее */
 body.theme-elma .grid3 > .panel,body.theme-elma .grid2 > .panel,body.theme-elma .grid4 > .panel{border:1px solid var(--line);border-radius:4px;padding:14px 16px}
@@ -665,6 +666,18 @@ body.theme-elma .user-menu .avatar.sm{background:#2f5f8f;color:#fff}
 body.theme-elma .user-menu div[data-act].cur{background:#e6f0fa}
 #top .logo .elogo{width:34px;height:34px;object-fit:contain}
 body.theme-elma .rail .rlogo .elogo{width:46px;height:46px;object-fit:contain}
+.kpi .pair2{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;align-items:baseline}
+.kpi .pair2 b{font-size:22px;font-weight:700;text-align:right}
+.kpi .pair2 span{font-size:12.5px;color:var(--muted);font-weight:500}
+a.kpi.link{display:block;color:inherit;text-decoration:none;cursor:pointer;transition:box-shadow .12s,border-color .12s}
+a.kpi.link:hover{border-color:var(--accent);box-shadow:0 2px 10px rgba(0,0,0,.08);text-decoration:none}
+body.theme-elma a.kpi.link:hover{border-color:#2f5f8f;box-shadow:none;background:#f6f9fc}
+/* ELMA: строки таблиц в одну линию, длинные ячейки обрезаются */
+body.theme-elma table.tbl td{white-space:nowrap;max-width:190px;overflow:hidden;text-overflow:ellipsis}
+body.theme-elma table.tbl td .badge+.badge{margin-left:6px}
+
+body.theme-elma table.tbl th{white-space:normal;line-height:1.2;max-width:120px}
+body.theme-elma table.tbl td:has(.badge),body.theme-elma table.tbl td:first-child{max-width:none}
 
 </style>
 </head>
@@ -864,6 +877,9 @@ function checkArbitration(lotObj) { // А7: сравнение нашей хим
 
 /* ---------- Прибытие (А5): фиксация договора, создание начислений ---------- */
 function arriveShipment(sh, dateIso) {
+  if (sh.status !== 'Отправлена') throw new Error(`Прибытие отмечается для отгрузки в статусе «Отправлена» (сейчас «${sh.status}»).`);
+  if (dateIso > DB.today) throw new Error('Дата прибытия не может быть позже учётной даты.');
+  if (sh.sentFact && dateIso < sh.sentFact) throw new Error(`Дата прибытия ${fmtD(dateIso)} раньше даты отправки ${fmtD(sh.sentFact)}.`);
   const lots = DB.lots.filter(l => l.shipmentId === sh.id);
   if (!lots.length) throw new Error('В отгрузке нет лотов. Сначала добавьте лоты по спецификации (А1), затем отмечайте прибытие.');
   const contract = findProcContract(sh.assetId, sh.procId, sh.productId, dateIso);
@@ -997,6 +1013,8 @@ function sourceName(s) { return { our: 'наша', proc: 'переработчи
 
 /* ---------- Отгрузка: создание, отмена ---------- */
 function createShipment(data) {
+  if (data.sentFact && data.sentFact > DB.today) throw new Error('Фактическая дата отправки не может быть позже учётной даты.');
+  if (data.fromLocId && locById(data.fromLocId).type === 'processor' && locById(data.fromLocId).ownerProc === data.procId) throw new Error('Переработчик и локация отправки совпадают.');
   const sh = { id: nextNo('ОТ', 3), status: 'Отправлена', procContractId: null, arrFact: null, endPlan: null, endFact: null, cancelReason: '', ...data };
   sh.groupId = asset(sh.assetId).groupId;
   DB.shipments.push(sh);
@@ -1004,6 +1022,8 @@ function createShipment(data) {
   return sh;
 }
 function addLot(sh, chem) {
+  if (sh.status !== 'Отправлена' && sh.status !== 'Планируется') throw new Error(`Лоты добавляются до прибытия (статус отгрузки «${sh.status}»). После прибытия состав отгрузки меняет администратор через «Изменить».`);
+  { const from = locById(sh.fromLocId); if (from.type === 'processor') { METALS.forEach(m => { const mass = chem[m + '_mass'] != null ? chem[m + '_mass'] : r1((chem.ligMass || 0) * (chem[m + '_conc'] || 0) / 100); if (mass > 0) { const acc = findAccountByLoc(sh.assetId, sh.fromLocId, m); const avail = acc ? acc.balance : 0; if (mass > avail + 0.05) throw new Error(`${m}: по нашей химии в лоте ${fmtKg(mass)}, а на счёте ${assetName(sh.assetId)} × ${from.name} только ${fmtKg(avail)}. С промежуточного переработчика нельзя отправить больше, чем начислено (А4).`); } }); } }
   const n = DB.lots.filter(l => l.shipmentId === sh.id).length + 1;
   const l = { id: sh.id + '/' + n, shipmentId: sh.id, assetId: sh.assetId, groupId: sh.groupId, status: sh.status === 'Отмена отправки' ? 'Отмена отправки' : sh.status, outputProductId: sh.outputProductId, ligMass: chem.ligMass, procContractId: sh.procContractId, condPlanId: null, condFinalId: null, finalConfirmed: false, finalSource: null, arbitrationRequired: false, processingCost: null, endPlan: null, endFact: null, specOur: chem.specOur || `Спецификация ${sh.id}-${n}.pdf`, docs: [] };
   METALS.forEach(m => { l[m + '_conc_our'] = chem[m + '_conc']; l[m + '_mass_our'] = r1(chem[m + '_mass'] != null ? chem[m + '_mass'] : chem.ligMass * chem[m + '_conc'] / 100); ['proc', 'arb', 'final'].forEach(c => { l[m + '_conc_' + c] = null; l[m + '_mass_' + c] = null; l[m + '_yield_' + c] = null; }); l[m + '_yield_plan'] = null; });
@@ -1024,12 +1044,13 @@ function cancelShipment(sh, reason) {
   logEvent('shipment', sh.id, 'Отмена отправки: ' + reason);
 }
 function updateLotChem(l, chem, reason) { // процесс «Изменить» (А38) для нашей химии
-  METALS.forEach(m => { if (chem[m + '_conc'] != null) l[m + '_conc_our'] = chem[m + '_conc']; if (chem[m + '_mass'] != null) l[m + '_mass_our'] = chem[m + '_mass']; });
   if (chem.ligMass != null) l.ligMass = chem.ligMass;
+  METALS.forEach(m => { if (chem[m + '_conc'] != null) l[m + '_conc_our'] = chem[m + '_conc']; if (chem[m + '_mass'] != null) l[m + '_mass_our'] = chem[m + '_mass']; else if (chem[m + '_conc'] != null || chem.ligMass != null) l[m + '_mass_our'] = r1(l.ligMass * l[m + '_conc_our'] / 100); });
   if (l.status !== 'Прибыла' && l.status !== 'Завершена переработка') { const c = findProcContract(l.assetId, shipment(l.shipmentId).procId, shipment(l.shipmentId).productId, shipment(l.shipmentId).sentFact); if (c) { const cond = pickCondition(c.id, chemOf(l, 'our')); l.condPlanId = cond ? cond.id : null; } }
   calcPlannedYield(l);
   checkArbitration(l);
   postLot(l);
+  replanAccruals(l);
   logEvent('lot', l.id, 'Изменена наша химия. Причина: ' + reason);
 }
 function setProcChem(l, cut, chem) {
@@ -1229,6 +1250,7 @@ function postTransfer(t) {
   return warnings;
 }
 function createTransfer(data) {
+  if (data.fromLocId === data.toLocId) throw new Error('Локации «Откуда» и «Куда» совпадают.');
   const t = { id: nextNo('ПМ', 3), status: 'Проведено', cancelReason: '', ...data };
   t.groupId = asset(t.assetId).groupId;
   if (t.date > DB.today) throw new Error('Дата перемещения не может быть позже учётной даты.');
@@ -1239,7 +1261,23 @@ function createTransfer(data) {
   logEvent('transfer', t.id, `Проведено: ${METALS.filter(m => t[m + '_mass'] > 0).map(m => fmtKg(t[m + '_mass']) + ' ' + m).join(', ')} ${locName(t.fromLocId)} → ${locName(t.toLocId)}`);
   return { t, warnings };
 }
-function cancelTransfer(t, reason) { t.status = 'Отменено'; t.cancelReason = reason; postTransfer(t); logEvent('transfer', t.id, 'Отменено: ' + reason); }
+function cancelTransfer(t, reason) {
+  if (t.status !== 'Проведено') throw new Error('Перемещение уже отменено.');
+  METALS.forEach(m => { const mass = t[m + '_mass'] || 0; if (mass <= 0) return; const dst = findAccountByLoc(t.assetId, t.toLocId, m); if (dst && dst.balance - mass < -0.05) throw new Error(`Отмена невозможна: со счёта ${accountName(dst)} уже списано ${fmtKg(mass - dst.balance)} из перемещённого металла (продажа или следующее перемещение). Сначала отмените те документы.`); });
+  t.status = 'Отменено'; t.cancelReason = reason; postTransfer(t); logEvent('transfer', t.id, 'Отменено: ' + reason);
+}
+/* пересчёт плановых масс неисполненных начислений после изменения нашей химии (А38 → А5/А7) */
+function replanAccruals(l) {
+  const accs = DB.accruals.filter(a => a.lotId === l.id && a.status === 'Планируется');
+  if (!accs.length || !l.procContractId) return;
+  METALS.forEach(m => {
+    const yieldPlan = l[m + '_yield_plan']; if (yieldPlan == null) return;
+    const mine = accs.filter(a => a.metal === m); const prelAll = DB.accruals.filter(a => a.lotId === l.id && a.metal === m && a.type === 'prelim' && a.status !== 'Отменено');
+    mine.forEach(a => { const rule = DB.rules.find(r => r.id === a.ruleId); if (!rule) return; if (a.type === 'prelim') a.planMass = r1(yieldPlan * rule.share / 100); });
+    mine.filter(a => a.type === 'final').forEach(a => { if (l.finalConfirmed) return; a.planMass = r1(yieldPlan - sum(prelAll, p => p.status === 'Исполнено' ? p.factMass : p.planMass)); });
+  });
+  logEvent('lot', l.id, 'Плановые массы неисполненных начислений пересчитаны по новой химии');
+}
 
 /* ---------- Корректировки ---------- */
 function addCorrection(acc, qty, dateIso, comment) {
@@ -1285,7 +1323,7 @@ function isAdmin() { return user(DB.currentUserId).role === 'admin'; }
 
 /* ---------- Форматирование ---------- */
 function fmtNum(x, dec = 0) { if (x == null || isNaN(x)) return '—'; const s = Math.abs(x).toFixed(dec).replace('.', ','); const [i, f] = s.split(','); const ii = i.replace(/\B(?=(\d{3})+(?!\d))/g, ' '); return (x < 0 ? '−' : '') + ii + (f ? ',' + f : ''); }
-function fmtKg(g) { if (g == null) return '—'; return fmtNum(g / 1000, 3) + ' кг'; }
+function fmtKg(g) { if (g == null) return '—'; if (Math.abs(g) < 0.05) return '0,0 кг'; return fmtNum(g / 1000, 3) + ' кг'; }
 function fmtG(g) { if (g == null) return '—'; return fmtNum(g, 1) + ' г'; }
 function fmtUsd(x) { return x == null ? '—' : fmtNum(x, 2) + ' $'; }
 function fmtRub(x) { return x == null ? '—' : fmtNum(x, 2) + ' ₽'; }
@@ -1305,9 +1343,31 @@ function changeShipment(sh, data, reason) { // ключевые поля (А38) 
   Object.assign(sh, data);
   if (sh.sentFact > DB.today) { Object.assign(sh, before); throw new Error('Фактическая дата отправки не может быть позже учётной даты.'); }
   sh.groupId = asset(sh.assetId).groupId;
-  DB.lots.filter(l => l.shipmentId === sh.id).forEach(l => { l.assetId = sh.assetId; l.groupId = sh.groupId; postLot(l); });
-  DB.accruals.filter(a => a.shipmentId === sh.id).forEach(a => { a.assetId = sh.assetId; });
-  logEvent('shipment', sh.id, `Изменены ключевые поля (${reason}); лоты перепроведены`);
+  const keyChanged = ['assetId', 'procId', 'productId'].some(k => before[k] !== sh[k]);
+  let contract = null;
+  if (sh.procContractId && keyChanged) {           // отгрузка уже прибыла — нужен договор под новый ключ
+    contract = findProcContract(sh.assetId, sh.procId, sh.productId, sh.arrFact || DB.today);
+    if (!contract) { Object.assign(sh, before); throw new Error(`Нет действующего договора переработки ${assetName(sh.assetId)} × ${procName(data.procId || sh.procId)} × ${productType(data.productId || sh.productId).name} на ${fmtD(sh.arrFact || DB.today)} — изменение отклонено.`); }
+    if (DB.accruals.some(a => a.shipmentId === sh.id && a.status === 'Исполнено' && lot(a.lotId).finalConfirmed)) { Object.assign(sh, before); throw new Error('По лотам отгрузки подтверждены итоги и исполнены финальные начисления — сначала снимите подтверждение (администратор).'); }
+    sh.procContractId = contract.id; sh.outputProductId = processor(sh.procId).outputProductId;
+  }
+  DB.lots.filter(l => l.shipmentId === sh.id).forEach(l => {
+    l.assetId = sh.assetId; l.groupId = sh.groupId; l.outputProductId = sh.outputProductId;
+    if (contract) { l.procContractId = contract.id; const cond = pickCondition(contract.id, chemOf(l, 'our')); l.condPlanId = cond ? cond.id : null; calcPlannedYield(l); }
+    postLot(l);
+  });
+  const moved = {};                                 // старый счёт → новый, для ленты счетов
+  DB.accruals.filter(a => a.shipmentId === sh.id).forEach(a => {
+    a.assetId = sh.assetId; a.procId = sh.procId;
+    if (keyChanged && sh.procContractId) { const acc = findOrCreateAccount(sh.assetId, locOfProcessor(sh.procId).id, a.metal); if (acc.id !== a.accountId) { const from = a.accountId; a.accountId = acc.id; (moved[from + '|' + acc.id] = moved[from + '|' + acc.id] || []).push(a); logEvent('accrual', a.id, `Перенацелено со счёта ${accountName(account(from))} на ${accountName(acc)} по изменению отгрузки ${sh.id}: ${reason}`); } postAccrual(a); }
+  });
+  if (contract) DB.lots.filter(l => l.shipmentId === sh.id).forEach(replanAccruals);
+  recalcAllAccounts();
+  const LBL = { assetId: ['Актив', assetName], procId: ['Переработчик', procName], productId: ['Тип продукции', v => productType(v).name], fromLocId: ['Откуда', locName], sentFact: ['Дата отправки (факт)', fmtD] };
+  const diff = Object.keys(LBL).filter(k => before[k] !== sh[k]).map(k => `${LBL[k][0]}: ${LBL[k][1](before[k])} → ${LBL[k][1](sh[k])}`).join('; ');
+  logEvent('shipment', sh.id, `Изменены ключевые поля — ${diff || 'без изменений'}. Причина: ${reason}. Лоты и начисления перепроведены` + (contract ? `, договор переработки теперь ${contract.no}` : ''));
+  Object.keys(moved).forEach(k => { const [from, to] = k.split('|'); const list = moved[k]; const done = list.filter(a => a.status === 'Исполнено'); const txt = `${list.length} начислений по отгрузке ${sh.id}` + (done.length ? ` (исполнено ${done.length}: ${METALS.map(m => { const q = sum(done.filter(a => a.metal === m), a => a.factMass); return q ? fmtKg(q) + ' ' + m : null; }).filter(Boolean).join(', ')})` : ''); logEvent('account', from, `Снято: ${txt} перенесены на счёт ${accountName(account(to))} — изменение отгрузки: ${reason}`); logEvent('account', to, `Получено: ${txt} перенесены со счёта ${accountName(account(from))} — изменение отгрузки: ${reason}`); });
+  DB.lots.filter(l => l.shipmentId === sh.id).forEach(l => logEvent('lot', l.id, `Перепроведён по изменению отгрузки ${sh.id}: ${diff}. Причина: ${reason}`));
 }
 function setShipmentStatus(sh, status) { // администратор, MVP-1: статус как поле + каскад А3
   sh.status = status;
@@ -1903,7 +1963,7 @@ const badge = (s, extra = '') => `<span class="badge ${STATUS_COLOR[s] || 'viole
 const metalTag = m => `<span class="metal ${m}">${m}</span>`;
 const STAGE_TITLE = { mvp1: 'Предусмотрено ТЗ, этап MVP-1', mvp2: 'Предусмотрено ТЗ, этап MVP-2', after: 'После MVP — отложенная функция', proto: 'Предложено для удобства прототипа, в ТЗ не описано', q: 'Спорное допущение прототипа — требует подтверждения бизнесом' };
 const STAGE_LABEL = { mvp1: 'MVP-1', mvp2: 'MVP-2', after: 'После MVP', proto: 'Прототип', q: 'Допущение' };
-const stage = (s, text, force) => (s === 'proto' || s === 'q') && !force ? '' : `<span class="stage ${s}" title="${STAGE_TITLE[s]}">${text || STAGE_LABEL[s]}</span>`;
+const stage = (s, text, force) => (s === 'proto' || s === 'q' || s === 'mvp1') && !force ? '' : `<span class="stage ${s}" title="${STAGE_TITLE[s]}">${text || STAGE_LABEL[s]}</span>`;
 const yesNo = b => b ? '<span class="chk">✓ да</span>' : '<span class="muted">нет</span>';
 
 /* ---------- toast / confirm / modal ---------- */
@@ -1963,7 +2023,7 @@ function table(cfg) {
   if (!sortState && cfg.defaultOrder) rows.sort(cfg.defaultOrder);
   if (sortState) { const col = cfg.cols.find(c => c.key === sortState.key); if (col) { const sv = col.sortVal || col.val || (r => r[col.key]); rows.sort((a, b) => { const x = sv(a), y = sv(b); const c = (x == null) - (y == null) || (typeof x === 'number' ? x - y : String(x).localeCompare(String(y), 'ru')); return sortState.dir === 'desc' ? -c : c; }); } }
   const head = cfg.cols.map(c => `<th class="${c.num ? 'num' : ''} ${c.sortable !== false ? 'sortable' : ''}" data-sort="${id}|${c.key}" ${c.w ? `style="width:${c.w}"` : ''}>${c.label}${sortState && sortState.key === c.key ? `<span class="arr">${sortState.dir === 'desc' ? '▼' : '▲'}</span>` : ''}</th>`).join('');
-  const body = rows.length ? rows.map(r => { const href = cfg.rowHref ? cfg.rowHref(r) : null; const cls = (cfg.rowClass ? cfg.rowClass(r) : '') + (href ? ' row' : ''); return `<tr class="${cls}" ${href ? `data-href="${esc(href)}"` : ''}>${cfg.cols.map(c => `<td class="${c.num ? 'num' : ''} ${c.cls || ''}">${c.render ? c.render(r) : esc(c.val ? c.val(r) : r[c.key])}</td>`).join('')}</tr>`; }).join('') : `<tr><td class="empty" colspan="${cfg.cols.length}">${cfg.empty || 'Нет записей'}</td></tr>`;
+  const body = rows.length ? rows.map(r => { const href = cfg.rowHref ? cfg.rowHref(r) : null; const cls = (cfg.rowClass ? cfg.rowClass(r) : '') + (href ? ' row' : ''); return `<tr class="${cls}" ${href ? `data-href="${esc(href)}"` : ''}>${cfg.cols.map(c => { const cell = c.render ? c.render(r) : esc(c.val ? c.val(r) : r[c.key]); const tt = String(cell ?? '').replace(/<[^>]+>/g, '').replace(/"/g, '&quot;').trim(); return `<td class="${c.num ? 'num' : ''} ${c.cls || ''}" ${tt.length > 18 ? `title="${tt}"` : ''}>${cell}</td>`; }).join('')}</tr>`; }).join('') : `<tr><td class="empty" colspan="${cfg.cols.length}">${cfg.empty || 'Нет записей'}</td></tr>`;
   let totals = '';
   if (cfg.totals && rows.length) totals = `<tr class="total">${cfg.cols.map((c, i) => { if (i === 0) return `<td>Итого${cfg.totalsLabel ? ' ' + cfg.totalsLabel : ''}</td>`; if (c.total) return `<td class="num">${c.total(rows)}</td>`; return '<td></td>'; }).join('')}</tr>`;
   return `<div class="tbl-wrap"><table class="tbl ${cfg.compact ? 'compact' : ''}"><thead><tr>${head}</tr></thead><tbody>${body}${totals}</tbody></table></div>`;
@@ -2098,18 +2158,19 @@ function viewOverview() {
 
   const attention = [];
   { const due = dueAccruals().filter(a => canSee(asset(a.assetId).groupId)); if (due.length) attention.push({ dot: 'blue', text: `${due.length} ${due.length === 1 ? 'начисление наступило' : due.length < 5 ? 'начисления наступили' : 'начислений наступило'} (${fmtKg(sum(due, a => a.planMass))}) — исполнит планировщик А31 · <a class="ref" data-act="setToday">сдвинуть дату</a>` }); }
-  waiting.forEach(a => attention.push({ dot: 'red', text: `Финальное начисление ${a.metal} по лоту ${refLink('lot', a.lotId)} ждёт подтверждения итоговых показателей (плановая дата ${fmtD(a.planDate)} прошла)` }));
-  arbLots.forEach(l => attention.push({ dot: 'amber', text: `Лот ${refLink('lot', l.id)}: расхождение химии выше порога — требуется арбитраж, итоговые показатели не подтверждены` }));
-  overduePays.forEach(p => attention.push({ dot: 'amber', text: `Оплата ${refLink('payment', p.id)} по контракту ${refLink('contract', p.contractId)} (${esc(client(deal(p.dealId).clientId).name)}) просрочена: план ${fmtD(p.planDate)}, ${fmtUsd(p.planUSD)}` }));
+  { const byLot = {}; waiting.forEach(a => { (byLot[a.lotId] = byLot[a.lotId] || []).push(a); });
+    Object.keys(byLot).forEach(lid => { const as = byLot[lid]; const l = lot(lid); const since = as.map(a => a.planDate).sort()[0]; attention.push({ dot: 'red', text: `Лот ${refLink('lot', lid)}: подтвердите итоговые показатели — финальные начисления ${as.map(a => a.metal).join(', ')} просрочены с ${fmtD(since)}${l.arbitrationRequired ? '; расхождение с заводом выше порога — нужен арбитраж' : ''}` }); });
+    arbLots.filter(l => !byLot[l.id]).forEach(l => attention.push({ dot: 'amber', text: `Лот ${refLink('lot', l.id)}: расхождение с заводом выше порога — нужен арбитраж` })); }
+  overduePays.forEach(p => attention.push({ dot: 'amber', text: `Оплата ${refLink('payment', p.id)} (${esc(client(deal(p.dealId).clientId).name)}, ${fmtUsd(p.planUSD)}) просрочена с ${fmtD(p.planDate)}` }));
   hotLimits.forEach(l => attention.push({ dot: 'amber', text: `Лимит ${refLink('limit', l.id, l.name)} использован на ${limitPct(l)} % — остаток ${fmtKg(limitRemaining(l))}` }));
-  oldNT.forEach(c => attention.push({ dot: 'blue', text: `Контракт ${refLink('contract', c.id)} (${esc(assetName(c.assetId))}, ${fmtKg(c.mass)} ${dealMetal(c)}) не передан ${daysBetween(c.date, DB.today)} дн. после даты контракта` }));
+  oldNT.forEach(c => attention.push({ dot: 'blue', text: `Контракт ${refLink('contract', c.id)} (${esc(assetName(c.assetId))}, ${fmtKg(c.mass)} ${dealMetal(c)}) не передан ${daysBetween(c.date, DB.today)} дн.` }));
   ships.filter(s => s.status === 'Отправлена' && s.arrPlan && s.arrPlan < DB.today).forEach(s => attention.push({ dot: 'amber', text: `Отгрузка ${refLink('shipment', s.id)} должна была прибыть ${fmtD(s.arrPlan)} — прибытие не отмечено` }));
   accs.filter(a => a.balance < 0).forEach(a => attention.push({ dot: 'red', text: `Отрицательный остаток на счёте ${refLink('account', a.id, accountName(a))}: ${fmtKg(a.balance)}` }));
   contracts.filter(c => c.transferDate && !c.giisReported && addDays(c.transferDate, 5) <= DB.today).forEach(c => attention.push({ dot: 'amber', text: `Контракт ${refLink('contract', c.id)}: не подан отчёт в ГИИС ДМДК о переходе собственности (срок ${fmtD(addDays(c.transferDate, 5))})` }));
   vis.payments().filter(p => p.status === 'Поступила' && !p.rfmReported && addBusinessDays(p.factDate, 3) <= DB.today).forEach(p => attention.push({ dot: 'amber', text: `Оплата ${refLink('payment', p.id)}: не подан отчёт в Росфинмониторинг (срок ${fmtD(addBusinessDays(p.factDate, 3))})` }));
   (DB.reconciliations || []).filter(x => x.status === 'Расхождение' && canSee(x.groupId)).forEach(x => attention.push({ dot: 'amber', text: `Акт сверки ${esc(x.id)} за ${x.period}: расхождение с заводом ${fmtKg(x.diff)} по счёту ${refLink('account', x.accountId, accountName(account(x.accountId)))}` }));
 
-  const kpi = (label, val, sub, cls = '') => `<div class="kpi ${cls}"><div class="kl"><span>${label}</span></div><div class="kv">${val}</div>${sub ? `<div class="ks">${sub}</div>` : ''}</div>`;
+  const kpi = (label, val, sub, cls = '', href = '') => `<${href ? `a href="${href}"` : 'div'} class="kpi ${cls} ${href ? 'link' : ''}"><div class="kl"><span>${label}</span></div><div class="kv">${val}</div>${sub ? `<div class="ks">${sub}</div>` : ''}</${href ? 'a' : 'div'}>`;
   const twoMetals = (fAu, fAg) => `<div class="row2"><span>${metalTag('Au')} ${fAu}</span><span>${metalTag('Ag')} ${fAg}</span></div>`;
 
   const nextAccr = planned.slice().sort((a, b) => cmpDate(a.planDate, b.planDate)).slice(0, 8);
@@ -2118,42 +2179,32 @@ function viewOverview() {
   vis.accruals().filter(a => a.status === 'Исполнено').forEach(a => { const k = a.factDate.slice(0, 7); byMonth[k] = byMonth[k] || { Au: 0, Ag: 0 }; byMonth[k][a.metal] += a.factMass; });
   const months = Object.keys(byMonth).sort();
   const u = user(DB.currentUserId);
-  const emptyGuide = !DB.shipments.length && !DB.deals.length ? `<div class="panel guide"><div class="pt"><h2>Система пуста — пройдите флоу с нуля</h2>${stage('proto')}</div>
-    <ol class="steps">
-      <li><b>Справочники и договоры уже заведены</b> (администратор): ${link('#/refs', 'справочники')}, ${link('#/proc-contracts', 'договоры переработки')} с условиями и правилами начислений, ${link('#/limits', 'лимиты')}. Счетов УМС пока нет — откроются сами.</li>
-      <li><b>Отгрузка МПФ</b>: ${link('#/shipments', 'Отгрузки')} → «+ Отгрузка» → затем в карточке «+ Добавить лот» (масса и наша химия по спецификации).</li>
-      <li><b>Прибытие</b>: «Сценарии → Отметить прибытие» — система зафиксирует договор, условия лотов и создаст плановые начисления.</li>
-      <li><b>Время</b>: сдвиньте учётную дату (клик по дате в шапке) — планировщик исполнит предварительные начисления, на счёте появится металл.</li>
-      <li><b>Химия завода</b>: в лоте «Внести показатели переработчика» → при необходимости арбитраж → «Подтвердить итоговые показатели» → финальные начисления.</li>
-      <li><b>Реализация</b>: ${link('#/deals', 'Сделки')} → «+ Сделка» → «Добавить контракт» (списание со счёта, расход лимита) → оплаты → передача металла.</li>
-    </ol></div>` : '';
   return `
-  ${emptyGuide}
-  <div class="ph"><div class="t"><h1>Обзор</h1><div class="sub">Учётная дата ${fmtD(DB.today)} · роль: ${esc(u.name)}, ${esc(u.roleName)}${u.groupId ? ', ' + esc(group(u.groupId).name) : ' (уровень компании)'} · показаны данные видимых групп активов</div></div>
-    <div class="actions">${link('#/about', 'О прототипе и сценариях', 'btn')}</div></div>
+  <div class="ph"><div class="t"><h1>Обзор</h1><div class="sub">${u.groupId ? esc(group(u.groupId).name) + ' · ' : ''}${fmtD(DB.today)}</div></div>
+    <div class="actions">${link('#/about', 'О прототипе', 'btn')}</div></div>
   <div class="grid4">
-    ${kpi('Доступно к продаже на аффинажных заводах', twoMetals(fmtKg(bal(refAcc, 'Au')), fmtKg(bal(refAcc, 'Ag'))), `На площадках и складах: Au ${fmtKg(bal(otherAcc, 'Au'))}, Ag ${fmtKg(bal(otherAcc, 'Ag'))}<br>Полуфабрикат у промежуточных переработчиков: Au ${fmtKg(bal(interAcc, 'Au'))}, Ag ${fmtKg(bal(interAcc, 'Ag'))} — не входит в «готово к продаже»`, 'ok')}
-    ${kpi('Продано, но не передано', twoMetals(fmtKg(ntMass('Au')), fmtKg(ntMass('Ag'))), `${notTransferred.length} контракт(ов) без отметки о передаче; стоимость ${fmtUsd(r2(sum(notTransferred, contractCostUSD)))}`, notTransferred.length ? 'warn' : '')}
-    ${kpi('Ожидаемые начисления в ближайшие 30 дней', twoMetals(fmtKg(expected('Au')), fmtKg(expected('Ag'))), `${planned.length} начислений в статусе «Планируется»${waiting.length ? `; <span class="neg">${waiting.length} финальных ждут итоговых показателей</span>` : ''}`, waiting.length ? 'bad' : '')}
-    ${kpi('Остаток к оплате по сделкам', fmtUsd(remUSD), `Поступило за 30 дней: ${fmtRub(recvRub)}${overduePays.length ? `; <span class="neg">просрочено плановых оплат: ${overduePays.length}</span>` : ''}`, overduePays.length ? 'warn' : '')}
+    ${kpi('Доступно к продаже', twoMetals(fmtKg(bal(refAcc, 'Au')), fmtKg(bal(refAcc, 'Ag'))), '', 'ok', '#/accounts')}
+    ${kpi('Продано, не передано', twoMetals(fmtKg(ntMass('Au')), fmtKg(ntMass('Ag'))), notTransferred.length ? `${notTransferred.length} контр. · ${fmtUsd(r2(sum(notTransferred, contractCostUSD)))}` : '', notTransferred.length ? 'warn' : '', '#/contracts')}
+    ${kpi('Ожидается за 30 дней', twoMetals(fmtKg(expected('Au')), fmtKg(expected('Ag'))), waiting.length ? `<span class="neg">${waiting.length} финальных ждут итогов</span>` : (planned.length ? `${planned.length} начислений` : ''), waiting.length ? 'bad' : '', '#/accruals')}
+    ${kpi('К оплате по сделкам', fmtUsd(remUSD), overduePays.length ? `<span class="neg">просрочено: ${overduePays.length}</span>` : (recvRub ? `поступило за 30 дней ${fmtRub(recvRub)}` : ''), overduePays.length ? 'warn' : '', '#/payments')}
   </div>
   <div class="grid4" style="margin-top:14px">
-    ${kpi('Отгрузки МПФ', `${ships.filter(s => s.status === 'Отправлена').length}<span class="u">в пути</span> &nbsp; ${ships.filter(s => s.status === 'Прибыла').length}<span class="u">в переработке</span>`, `Завершено за 30 дней: ${ships.filter(s => s.status === 'Завершена переработка' && s.endFact >= since30).length}. Объёмы «в пути» — по лотам отгрузок, отдельного остатка такого типа в модели нет`)}
-    ${kpi('Лоты', `${arbLots.length}<span class="u">требуют арбитража</span> &nbsp; ${vis.lots().filter(l => l.status === 'Прибыла' && !l.finalConfirmed).length}<span class="u">без итоговых показателей</span>`, `Всего лотов в переработке: ${vis.lots().filter(l => l.status === 'Прибыла').length}`, arbLots.length ? 'warn' : '')}
-    ${kpi('Лимиты (действующие)', `${lims.length}<span class="u">лимитов</span> &nbsp; ${hotLimits.length}<span class="u">≥ 80 %</span>`, lims.length ? `Минимальный остаток: ${(() => { const m = lims.slice().sort((a, b) => limitRemaining(a) - limitRemaining(b))[0]; return `${esc(m.name)} — ${fmtKg(limitRemaining(m))}`; })()}` : '', hotLimits.length ? 'warn' : '')}
-    ${kpi('Сделки', `${vis.deals().filter(d => ['Заключена', 'Исполняется'].includes(d.status)).length}<span class="u">активных</span> &nbsp; ${vis.deals().filter(d => d.status === 'Предварительная').length}<span class="u">предварительных</span>`, `Завершено: ${vis.deals().filter(d => d.status === 'Завершена').length}, отменено: ${vis.deals().filter(d => d.status === 'Отменена').length}`)}
+    ${kpi('Отгрузки', pair2(ships.filter(s => s.status === 'Отправлена').length, 'в пути', ships.filter(s => s.status === 'Прибыла').length, 'в переработке'), '', '', '#/shipments')}
+    ${kpi('Лоты', pair2(arbLots.length, 'арбитраж', vis.lots().filter(l => l.status === 'Прибыла' && !l.finalConfirmed).length, 'ждут итогов'), '', arbLots.length ? 'warn' : '', '#/lots')}
+    ${kpi('Лимиты', pair2(lims.length, 'действуют', hotLimits.length, '≥ 80 %'), '', hotLimits.length ? 'warn' : '', '#/limits')}
+    ${kpi('Сделки', pair2(vis.deals().filter(d => ['Заключена', 'Исполняется'].includes(d.status)).length, 'активных', vis.deals().filter(d => d.status === 'Предварительная').length, 'предварительных'), '', '', '#/deals')}
   </div>
   <div class="two" style="margin-top:14px">
     <div>
       <div class="panel"><div class="pt"><h2>Требует внимания</h2>${stage('proto')}</div>${attention.length ? `<ul class="att">${attention.map(a => `<li><span class="dot ${a.dot}"></span><span>${a.text}</span></li>`).join('')}</ul>` : '<div class="muted">Всё в порядке</div>'}</div>
-      <div class="panel"><div class="pt"><h2>Остатки по счетам аффинажных заводов</h2><span class="muted small">химически чистая масса, доступная к продаже</span></div>
+      <div class="panel"><div class="pt"><h2>Остатки на аффинажных заводах</h2></div>
         ${table({ id: 'ov_acc', compact: true, rows: refAcc.slice().sort((a, b) => assetName(a.assetId).localeCompare(assetName(b.assetId), 'ru') || a.metal.localeCompare(b.metal)), rowHref: r => H.account(r.id), cols: [
     { key: 'asset', label: 'Актив', val: r => assetName(r.assetId) }, { key: 'loc', label: 'Завод', val: r => locName(r.locId) }, { key: 'metal', label: 'Металл', render: r => metalTag(r.metal) },
     { key: 'bal', label: 'Остаток', num: true, sortVal: r => r.balance, render: r => `<b class="${r.balance < 0 ? 'neg' : ''}">${fmtKg(r.balance)}</b>` },
     { key: 'exp', label: 'Ожидается (план)', num: true, sortVal: r => sum(planned.filter(a => a.accountId === r.id), a => a.planMass), render: r => { const v = sum(planned.filter(a => a.accountId === r.id), a => a.calcMass != null ? a.calcMass : a.planMass); return v ? fmtKg(v) : '<span class="muted">—</span>'; } },
     { key: 'nt', label: 'Продано, не передано', num: true, sortVal: r => sum(notTransferred.filter(c => c.accountId === r.id), c => c.mass), render: r => { const v = sum(notTransferred.filter(c => c.accountId === r.id), c => c.mass); return v ? fmtKg(v) : '<span class="muted">—</span>'; } },
   ] })}
-        <div class="small muted" style="margin-top:6px">Au и Ag не суммируются между собой. Остаток уже уменьшен на проданный, но не переданный металл (контракт списывает при создании).</div>
+
       </div>
       <div class="panel"><div class="pt"><h2>Исполненные начисления по месяцам</h2>${stage('proto')}</div>
         <div class="grid2"><div><div class="small muted" style="margin-bottom:4px">${metalTag('Au')} кг</div>${barChart(months.map(m => ({ label: m.slice(5) + '.' + m.slice(2, 4), value: r1(byMonth[m].Au / 1000), color: '#d9a21b' })), { fmt: v => fmtNum(v, 0) })}</div>
@@ -2245,7 +2296,7 @@ function viewShipment(id) {
     { label: 'Отметить прибытие', act: 'arrive', tag: stage('mvp2', 'А5'), disabled: sh.status !== 'Отправлена' },
     { label: 'Отменить отправку', act: 'cancelShip', tag: stage('mvp2', 'А10'), disabled: !canCancel, title: canCancel ? '' : 'Недоступно: есть исполненные начисления или отгрузка завершена' },
     'sep', { hd: 'Изменение документа' },
-    { label: 'Изменить ключевые поля (с причиной)', act: 'changeShipment', tag: stage('mvp2', 'А38'), disabled: sh.status === 'Отмена отправки' },
+    { label: 'Изменить ключевые поля', act: 'changeShipment', tag: stage('mvp2', 'А38'), disabled: sh.status === 'Отмена отправки' },
     'sep', { hd: 'Администратор' },
     { label: 'Сменить статус вручную', act: 'statusShipment', tag: stage('mvp1'), disabled: !isAdmin() },
     { label: 'Перепровести лоты', act: 'repostLots', tag: stage('mvp1', 'А36'), disabled: !isAdmin() },
@@ -2399,7 +2450,7 @@ function viewLot(id) {
     { label: 'Подтвердить итоговые показатели', act: 'confirmFinal', tag: stage('mvp2', 'А33'), disabled: l.status !== 'Прибыла' || l.finalConfirmed || !(cutFilled(l, 'proc') || cutFilled(l, 'arb')), title: l.status === 'Прибыла' && !l.finalConfirmed && !(cutFilled(l, 'proc') || cutFilled(l, 'arb')) ? 'Сначала внесите показатели переработчика (акт приёмки завода)' : '' },
     { label: 'Снять подтверждение', act: 'unconfirm', tag: stage('mvp2', 'А34'), disabled: !l.finalConfirmed || finalsDone, title: finalsDone ? 'Финальные начисления исполнены — только администратор' : '' },
     'sep', { hd: 'Изменение документа' },
-    { label: 'Изменить нашу химию (с причиной)', act: 'editOurChem', tag: stage('mvp2', 'А38'), disabled: l.status === 'Отмена отправки' },
+    { label: 'Изменить нашу химию', act: 'editOurChem', tag: stage('mvp2', 'А38'), disabled: l.status === 'Отмена отправки' },
     { label: 'Добавить начисление вручную', act: 'newAccrualLot', tag: stage('mvp1'), disabled: l.status !== 'Прибыла' },
     'sep', { hd: 'Администратор' },
     { label: 'Сменить статус вручную', act: 'statusLot', tag: stage('mvp1'), disabled: !isAdmin() },
@@ -2504,7 +2555,7 @@ function viewAccrual(id) {
     { label: 'Исполнить вручную (досрочно / по выписке завода)', act: 'execAccrual', tag: stage('mvp2', 'А32'), disabled: a.status !== 'Планируется' || (a.type === 'final' && !l.finalConfirmed), title: a.type === 'final' && !l.finalConfirmed ? 'Сначала подтвердите итоговые показатели лота' : '' },
     { label: 'Отменить начисление', act: 'cancelAccrual', tag: stage('mvp2'), disabled: a.status !== 'Планируется' },
     'sep', { hd: 'Изменение документа' },
-    { label: 'Изменить фактические дату/массу (с причиной)', act: 'changeAccrual', tag: stage('mvp2', 'А38'), disabled: a.status !== 'Исполнено' },
+    { label: 'Изменить фактические дату/массу', act: 'changeAccrual', tag: stage('mvp2', 'А38'), disabled: a.status !== 'Исполнено' },
     'sep', { hd: 'Администратор' },
     { label: 'Вернуть в «Планируется»', act: 'revertAccrual', tag: stage('mvp1'), disabled: !isAdmin() || a.status === 'Планируется' },
     { label: 'Сменить статус вручную', act: 'statusAccrual', tag: stage('mvp1'), disabled: !isAdmin() },
@@ -2645,6 +2696,8 @@ function formResetData() {
     submit: v => { resetDemo(v.mode); setTimeout(() => go('#/overview'), 0); }, submitLabel: 'Сбросить' });
 }
 
+function pair2(n1, l1, n2, l2) { return `<div class="pair2"><b>${n1}</b><span>${l1}</span><b>${n2}</b><span>${l2}</span></div>`; }
+
 /* ============================================================
    VIEWS 2: реализация, счета, перемещения, лимиты, после MVP, аналитика, справочники, оболочка
    ============================================================ */
@@ -2712,7 +2765,7 @@ function viewDeal(id) {
     { label: 'Заключить сделку', act: 'concludeDeal', tag: stage('mvp2', 'А15'), disabled: d.status !== 'Предварительная' },
     { label: 'Отменить сделку', act: 'cancelDeal', tag: stage('mvp2', 'А16'), disabled: ['Отменена', 'Завершена'].includes(d.status) },
     'sep', { hd: 'Изменение документа' },
-    { label: 'Изменить условия (с причиной)', act: 'changeDeal', tag: stage('mvp2', 'А38'), disabled: ['Предварительная', 'Отменена'].includes(d.status) },
+    { label: 'Изменить условия', act: 'changeDeal', tag: stage('mvp2', 'А38'), disabled: ['Предварительная', 'Отменена'].includes(d.status) },
     'sep', { hd: 'Администратор' },
     { label: 'Сменить статус вручную', act: 'statusDeal', tag: stage('mvp1'), disabled: !isAdmin() },
     { label: 'Удалить сделку', act: 'deleteDeal', disabled: !isAdmin() || d.status !== 'Отменена', title: 'Только отменённую, только администратор (3.3.7)' },
@@ -2734,7 +2787,9 @@ function viewDeal(id) {
     { l: 'Сумма поступивших оплат, ₽', v: fmtRub(a.paidRub) }, { l: 'Оплачено, USD', v: fmtUsd(a.paidUSD) }, { l: 'Остаток к оплате, USD', v: `<b class="${a.remUSD > DB.params.payTolerance ? '' : 'pos'}">${fmtUsd(a.remUSD)}</b>${Math.abs(a.remUSD) <= DB.params.payTolerance && a.paidUSD > 0 ? ' <span class="muted small">в пределах допуска ' + fmtUsd(DB.params.payTolerance) + '</span>' : ''}` },
     { l: 'Признак «Отгрузка»', v: active ? badge(a.shipFlag) : '—' }, { l: 'Признак «Оплата»', v: active ? badge(a.payFlag) : '—' },
   ], 'c4')}</div>
-  <div class="panel"><div class="pt"><h2>Контракты</h2></div>${table({ id: 'dc', compact: true, cols: contractCols(), rows: cs, rowHref: r => H.contract(r.id), totals: true, rowClass: r => r.status === 'Отменена' ? 'dim' : '' })}</div>`;
+  <div class="panel"><div class="pt"><h2>Контракты</h2><span class="muted small">по одному на каждый актив-продавец; контракт сразу списывает металл со счёта и расходует лимит</span><span class="spacer"></span>${['Предварительная', 'Заключена'].includes(d.status) ? `<button class="btn primary sm" data-act="addContract">+ Добавить контракт</button>` : ''}</div>
+  ${cs.length ? table({ id: 'dc', compact: true, cols: contractCols(), rows: cs, rowHref: r => H.contract(r.id), totals: true, rowClass: r => r.status === 'Отменена' ? 'dim' : '' }) : (d.status === 'Предварительная' ? `<div class="empty-state"><div><b>Контрактов пока нет.</b> Добавьте контракт по каждому активу-продавцу кнопкой «+ Добавить контракт»: актив, масса ХЧ, лигатурная масса и проба. При сохранении металл спишется со счёта актива на месте забора, а лимит актива уменьшится.</div><div class="muted small">Когда контракты добавлены — «Сценарии → Заключить сделку»: котировки фиксируются, появляются оплаты и передача.</div></div>` : '<div class="muted" style="padding:10px 0">Контрактов нет.</div>')}
+  ${cs.length && d.status === 'Предварительная' ? `<div class="note info small" style="margin-top:10px"><b>Следующий шаг:</b> «Сценарии → Заключить сделку» — фиксируются котировка и курс, контракты переходят в «Заключена», после этого можно добавлять оплаты и отмечать передачу металла.</div>` : ''}</div>`;
   if (t.cur === 'contracts') body = `<div class="panel">${table({ id: 'dc2', cols: contractCols(), rows: cs, rowHref: r => H.contract(r.id), totals: true, rowClass: r => r.status === 'Отменена' ? 'dim' : '' })}</div>`;
   if (t.cur === 'pays') body = `<div class="panel"><div class="pt"><h2>Все оплаты контрактов сделки</h2></div>${table({ id: 'dp', cols: paymentCols({ withContract: true }), rows: pays, rowHref: r => H.payment(r.id), totals: true, defaultOrder: PAYMENT_ORDER })}
     <div class="note info small" style="margin-top:10px">Исполнение оплаты считается в долларах: каждый рублёвый платёж покрывает часть долларовой стоимости по курсу на дату платежа. Сравнение рублей с ориентировочной оценкой показало бы несуществующий долг.</div></div>`;
@@ -2765,7 +2820,7 @@ function viewContract(id) {
     { label: 'Добавить оплату', act: 'addPayment', tag: stage('mvp2', 'А20'), disabled: ['Отменена', 'Завершена'].includes(c.status) },
     { label: 'Отметить отчёт в ГИИС ДМДК', act: 'giisReport', tag: stage('proto'), disabled: !c.transferDate || !!c.giisReported },
     'sep', { hd: 'Изменение документа' },
-    { label: 'Изменить массу, дату, продавца (с причиной)', act: 'editContract', tag: stage('mvp2', 'А38'), disabled: c.status === 'Отменена' },
+    { label: 'Изменить массу, дату, продавца', act: 'editContract', tag: stage('mvp2', 'А38'), disabled: c.status === 'Отменена' },
     { label: 'Отменить контракт', act: 'cancelContract', tag: stage('mvp2', 'А16'), disabled: ['Отменена', 'Завершена'].includes(c.status) || (!!c.transferDate && !isAdmin()), title: c.transferDate && !isAdmin() ? 'После передачи металла отменяет только администратор' : '' },
     'sep', { hd: 'Администратор' }, { label: 'Перепровести контракт', act: 'repostContract', tag: stage('mvp1', 'А36'), disabled: !isAdmin() },
     { label: 'Сменить статус вручную', act: 'statusContract', tag: stage('mvp1'), disabled: !isAdmin() },
@@ -2972,7 +3027,7 @@ function viewTransfers() {
 function viewTransfer(id) {
   const t = transfer(id); if (!t) return notFound('Перемещение'); if (!canSee(t.groupId)) return noAccess('Перемещение');
   const txs = DB.transactions.filter(x => x.transferId === id);
-  const actions = `<button class="btn" data-act="editTransfer" ${t.status !== 'Проведено' ? 'disabled' : ''}>Редактировать</button>` + actionsMenu([{ label: 'Отменить перемещение', act: 'cancelTransfer', tag: stage('mvp2', 'А16'), disabled: t.status !== 'Проведено' }, 'sep', { hd: 'Изменение документа' }, { label: 'Изменить массы, маршрут, дату (с причиной)', act: 'changeTransfer', tag: stage('mvp2', 'А38'), disabled: t.status !== 'Проведено' }, 'sep', { hd: 'Администратор' }, { label: 'Перепровести', act: 'repostTransfer', tag: stage('mvp1', 'А36'), disabled: !isAdmin() }, { label: 'Сменить статус вручную', act: 'statusTransfer', tag: stage('mvp1'), disabled: !isAdmin() }, { label: 'Удалить перемещение', act: 'deleteTransfer', disabled: !isAdmin() || t.status !== 'Отменено', title: 'Только отменённое, только администратор' }]);
+  const actions = `<button class="btn" data-act="editTransfer" ${t.status !== 'Проведено' ? 'disabled' : ''}>Редактировать</button>` + actionsMenu([{ label: 'Отменить перемещение', act: 'cancelTransfer', tag: stage('mvp2', 'А16'), disabled: t.status !== 'Проведено' }, 'sep', { hd: 'Изменение документа' }, { label: 'Изменить массы, маршрут, дату', act: 'changeTransfer', tag: stage('mvp2', 'А38'), disabled: t.status !== 'Проведено' }, 'sep', { hd: 'Администратор' }, { label: 'Перепровести', act: 'repostTransfer', tag: stage('mvp1', 'А36'), disabled: !isAdmin() }, { label: 'Сменить статус вручную', act: 'statusTransfer', tag: stage('mvp1'), disabled: !isAdmin() }, { label: 'Удалить перемещение', act: 'deleteTransfer', disabled: !isAdmin() || t.status !== 'Отменено', title: 'Только отменённое, только администратор' }]);
   return `${pageHeader({ crumbs: link('#/transfers', 'Перемещения') + ' / ' + esc(id), title: 'Перемещение ' + esc(id), titleExtra: badge(t.status), subtitle: `${esc(assetName(t.assetId))} · ${esc(locName(t.fromLocId))} → ${esc(locName(t.toLocId))} · ${fmtD(t.date)}`, actions })}
   <div class="panel">${fields([
     { l: 'Актив (собственник обоих счетов)', v: esc(assetName(t.assetId)) }, { l: 'Откуда', v: esc(locName(t.fromLocId)) }, { l: 'Куда', v: esc(locName(t.toLocId)) }, { l: 'Спецперевозчик', v: esc(carrier(t.carrierId).name) }, { l: 'Дата перемещения', v: fmtD(t.date) + ' <span class="muted small">дата обеих транзакций</span>' }, { l: 'Лигатурная масса', v: fmtKg(t.ligMass) },
@@ -3142,15 +3197,15 @@ function viewAbout() {
   const find = (pred, coll) => (DB[coll] || []).find(pred);
   const arbLot = find(l => l.arbitrationRequired && !l.finalConfirmed, 'lots'), negAcc = find(a => a.factMass != null && a.factMass < 0, 'accruals');
   const twoSellers = find(d => dealContracts(d.id).length >= 2 && d.status === 'Исполняется', 'deals'), fx = find(d => d.status === 'Завершена' && DB.payments.filter(p => p.dealId === d.id && p.status === 'Поступила').length >= 2, 'deals');
-  const draft = find(d => d.status === 'Предварительная', 'deals'), cancelled = find(c => c.status === 'Отменена' && deal(c.dealId).status !== 'Отменена', 'salesContracts');
-  const tr = find(t => t.status === 'Проведено' && locById(t.fromLocId).type === 'processor', 'transfers'), stage2 = find(s => locById(s.fromLocId).type === 'processor', 'shipments');
+  const draft = find(d => d.status === 'Предварительная', 'deals'), cancelled = find(c => c.status === 'Отменена' && deal(c.dealId) && deal(c.dealId).status !== 'Отменена', 'salesContracts');
+  const tr = find(t => t.status === 'Проведено' && locById(t.fromLocId) && locById(t.fromLocId).type === 'processor', 'transfers'), stage2 = find(s => locById(s.fromLocId) && locById(s.fromLocId).type === 'processor', 'shipments');
   const ourLog = find(c => c.logistics === 'our' && c.transferDate && !c.receivedDate, 'salesContracts'), inter = find(s => !isRefinery(s.procId) && s.status === 'Завершена переработка', 'shipments');
   const S = (t, d) => `<li style="margin-bottom:8px"><b>${t}</b><br>${d}</li>`;
   return `${pageHeader({ title: 'О прототипе', subtitle: 'Что это, как читать пометки и где смотреть сценарии' })}
   <div class="grid2">
   <div class="panel"><div class="pt"><h2>Что это</h2></div><div style="line-height:1.6">Интерактивный прототип рабочего приложения коммерческого блока по концепции «Учёт МПФ, переработки и реализации драгметаллов (ELMA365), v3.1». Один файл, без сервера и внешних библиотек.<br><br>Остатки счетов, расход лимитов и объёмов договоров, агрегаты сделок, признаки оплаты и отгрузки не вписаны руками: они пересчитываются из документов теми же правилами, что описаны в ТЗ (проведение лота, начисления, контракта и перемещения; остаток = сумма транзакций). Поэтому любое действие в прототипе меняет всё связанное.<br><br>Изменения сохраняются только в этом браузере (localStorage). Кнопка «Сбросить данные» в верхней панели возвращает исходное состояние.<br><br>Учётная дата зафиксирована: <b>${fmtD(DB.today)}</b>. Производственный календарь упрощён (выходные + список праздников).</div></div>
   <div class="panel"><div class="pt"><h2>Пометки в интерфейсе</h2></div><div class="kv">
-    <span class="k">${stage('mvp1')}</span><span>предусмотрено ТЗ, первый этап: данные, формулы, проведение документов, списки и карточки</span>
+    <span class="k">${stage('mvp1', null, true)}</span><span>базовый этап — всё, что без пометки: данные, формулы, проведение документов, списки и карточки. На экранах не помечается</span>
     <span class="k">${stage('mvp2')}</span><span>предусмотрено ТЗ, второй этап: автоматизации, сценарии с формами, канбаны, встроенные блоки. В прототипе такие действия работают, чтобы показать целевую картину; в MVP-1 их выполняет сотрудник вручную</span>
     <span class="k">${stage('after')}</span><span>отложено на «после MVP»: лицензирование, планирование, товарные позиции, BI</span>
   </div>
@@ -3168,13 +3223,13 @@ function viewAbout() {
   </ul>
   <div class="note info small" style="margin-top:12px">Переключатель роли в верхней панели переключает видимость по группам активов и права администратора.</div></div>
   </div>
-  <div class="panel"><div class="pt"><h2>Сценарии для проверки</h2></div><ol style="margin:0;padding-left:20px;line-height:1.5">
-    ${S('А. Обычный путь', `отгрузка ${refLink('shipment', 'ОТ-001')} → лот → начисления → счёт ${refLink('account', 'УМС-001', accountName(account('УМС-001')))} → сделка ${twoSellers ? refLink('deal', twoSellers.id) : ''} → контракт → платёж.`)}
+  <div class="panel"><div class="pt"><h2>Сценарии для проверки</h2>${DB.mode === 'clean' ? '<span class="muted small">включена чистая система — примеры появятся после «Сбросить данные → Демо-данные»</span>' : ''}</div><ol style="margin:0;padding-left:20px;line-height:1.5">
+    ${S('А. Обычный путь', shipment('ОТ-001') ? `отгрузка ${refLink('shipment', 'ОТ-001')} → лот → начисления → счёт ${account('УМС-001') ? refLink('account', 'УМС-001', accountName(account('УМС-001'))) : 'УМС'} → сделка ${twoSellers ? refLink('deal', twoSellers.id) : ''} → контракт → платёж.` : 'создайте отгрузку → добавьте лот → отметьте прибытие → сдвиньте учётную дату (начисления исполнятся) → заключите сделку → контракт → платёж.')}
     ${S('Б. Расхождение химии и арбитраж', arbLot ? `лот ${refLink('lot', arbLot.id)}: химия переработчика отличается от нашей выше порога, внесены показатели арбитража, итоговые ещё не подтверждены. Откройте вкладку «Химия», затем «Сценарии → Подтвердить итоговые показатели» и выберите источник.` : '—')}
     ${S('В. Несколько продавцов', twoSellers ? `сделка ${refLink('deal', twoSellers.id)}: один покупатель, два контракта разных активов, отдельные оплаты и общие итоги.` : '—')}
     ${S('Г. Разные курсы', fx ? `сделка ${refLink('deal', fx.id)}: два платежа по курсам 85 и 87 полностью закрывают долларовую стоимость, хотя рублей меньше ориентировочной оценки.` : '—')}
     ${S('Д. Недостаток металла / лимита', draft ? `сделка ${refLink('deal', draft.id)} (предварительная): «Сценарии → Добавить контракт». Укажите массу больше остатка — сохранение блокируется. Для предупреждения по лимиту: в сделке ${(() => { const x = DB.deals.find(dd => dd.metal === 'Au' && dd.status === 'Заключена' && dd.pickupLocId === 'L-P1'); return x ? refLink('deal', x.id) : 'по Au'; })()} добавьте контракт от Светлоярского ГОКа массой больше 20 кг — лимит почти исчерпан, сохранение пройдёт с предупреждением.` : '—')}
-    ${S('Е. Исправление / отмена', cancelled ? `контракт ${refLink('contract', cancelled.id)} отменён — остаток и расход лимита ${refLink('limit', cancelled.limitId, limit(cancelled.limitId).name)} восстановлены. В любом активном контракте: «Сценарии → Изменить массу» — перепроведение без двойного списания.` : '—')}
+    ${S('Е. Исправление / отмена', cancelled ? `контракт ${refLink('contract', cancelled.id)} отменён — остаток и расход лимита ${cancelled.limitId && limit(cancelled.limitId) ? refLink('limit', cancelled.limitId, limit(cancelled.limitId).name) : 'лимита'} восстановлены. В любом активном контракте: «Сценарии → Изменить массу» — перепроведение без двойного списания.` : '—')}
     ${S('Ж. Перемещение', tr ? `перемещение ${refLink('transfer', tr.id)}: два счёта одного собственника, согласованные приход и расход, расход лимита; статуса «в пути» нет. Создайте своё: ${link('#/transfers', 'Перемещения')} → «Создать перемещение».` : '—')}
     ${S('З. Отрицательное финальное начисление', negAcc ? `начисление ${refLink('accrual', negAcc.id)} (лот ${refLink('lot', negAcc.lotId)}): предварительно начислено больше итогового выхода, финальное отрицательное и уменьшает счёт.` : '—')}
     ${S('И. Два этапа переработки', inter && stage2 ? `отгрузка ${refLink('shipment', inter.id)} (цементат → промежуточный переработчик) начисляет металл на счёт ${refLink('account', (DB.accounts.find(a => a.assetId === inter.assetId && a.locId === locOfProcessor(inter.procId).id && a.metal === 'Au') || {}).id, 'Полярный ГОК · Сибирский МК · Au')}; отгрузка ${refLink('shipment', stage2.id)} от него к аффинажному заводу списывает металл по нашей химии (вкладка «Транзакции УМС» в лоте) и начисляет у завода. Связи лот-в-лот нет — только через счёт.` : '—')}
@@ -4127,7 +4182,7 @@ function renderTop() {
     <label class="tswitch" title="${UI.theme === 'elma' ? 'Оформление: как в ELMA365. Нажмите, чтобы вернуть демо-оформление' : 'Оформление: демо. Нажмите, чтобы переключить на вид как в ELMA365'}"><input type="checkbox" id="themeSw" ${UI.theme === 'elma' ? 'checked' : ''}><span class="track"></span><span class="tl"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 9v11"/></svg></span></label>
     <a class="sync" id="syncBadge" href="#/datasource"></a>
     <a class="today" data-act="setToday" title="Учётная дата прототипа — «сегодня». Нажмите, чтобы сдвинуть время вперёд и увидеть, как планировщик исполняет начисления">Учётная дата: <b>${fmtD(DB.today)}</b> <span class="muted">▸</span></a>
-    <span class="help elma-only" title="Справка ELMA365">?</span>
+    <a class="help elma-only" href="#/about" title="О прототипе: легенда, допущения, что сделано сверх ТЗ">?</a>
     <span class="menu-wrap"><button class="user" data-menu title="${esc(u.name)} — ${esc(u.roleName)}${u.groupId ? ', ' + esc(group(u.groupId).name) : ''}. Нажмите, чтобы переключить пользователя"><span class="avatar">${esc(u.name.split(' ').map(s => s[0]).join(''))}</span><span class="uinfo elma-only"><b>${esc(u.name)}</b><small>${esc(u.roleName)}${u.groupId ? ' · ' + esc(group(u.groupId).name) : ''}</small></span><span class="caret">▾</span></button>
     <div class="menu hidden user-menu"><div class="hd">Войти как</div>${DB.users.map(x => `<div data-act="switchUser" data-id="${x.id}" class="${x.id === u.id ? 'cur' : ''}"><span class="avatar sm">${esc(x.name.split(' ').map(s => s[0]).join(''))}</span><span><b>${esc(x.name)}</b><br><span class="muted small">${esc(x.roleName)}${x.groupId ? ' · ' + esc(group(x.groupId).name) : ' · вся компания'}</span></span>${x.id === u.id ? '<span class="chk">✓</span>' : ''}</div>`).join('')}</div></span>
     ${DB.mode === 'clean' ? '<span class="badge violet" title="Документов не было — всё, что вы видите, заведено вами">чистая система</span>' : ''}
