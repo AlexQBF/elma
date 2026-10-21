@@ -1619,10 +1619,12 @@ function buildDemo() {
 
   /* ---------- договоры переработки ---------- */
   const RULES = {
-    A: [['Au', 'prelim', 1, 5, 80], ['Au', 'final', 1, 10, null], ['Ag', 'prelim', 1, 7, 70], ['Ag', 'final', 1, 15, null]],
-    B: [['Au', 'prelim', 1, 3, 50], ['Au', 'prelim', 2, 7, 30], ['Au', 'final', 1, 12, null], ['Ag', 'prelim', 1, 10, 60], ['Ag', 'final', 1, 20, null]],
+    // типовые правила аффинажных заводов (со слов заказчика, в ТЗ числа не зафиксированы — там только пример 80/5+10):
+    // Au 95 % через 5 р.д. + финал (остальные 5 %) через 10 р.д.; Ag — одним финальным начислением через 20 р.д.
+    A: [['Au', 'prelim', 1, 5, 95], ['Au', 'final', 1, 10, null], ['Ag', 'final', 1, 20, null]],
+    B: [['Au', 'prelim', 1, 5, 95], ['Au', 'final', 1, 10, null], ['Ag', 'final', 1, 20, null]],
     C: [['Au', 'prelim', 1, 7, 70], ['Au', 'final', 1, 14, null], ['Ag', 'prelim', 1, 7, 60], ['Ag', 'final', 1, 14, null]],
-    D: [['Au', 'prelim', 1, 5, 95], ['Au', 'final', 1, 10, null], ['Ag', 'final', 1, 20, null]],                       // как у Ареала: Au 95/5 + 5/10, Ag 100 % через 20 р.д.
+    D: [['Au', 'prelim', 1, 5, 95], ['Au', 'final', 1, 10, null], ['Ag', 'final', 1, 20, null]],                       // то же, что A/B
     E: [['Au', 'prelim', 1, 12, 80], ['Au', 'final', 1, 16, null], ['Ag', 'final', 1, 20, null]],                      // «Купол»: Au 80/12 + 20/16
     F: [['Au', 'prelim', 1, 10, 50], ['Au', 'final', 1, 25, null], ['Ag', 'prelim', 1, 10, 50], ['Ag', 'final', 1, 25, null]], // концентрат
   };
@@ -1651,8 +1653,8 @@ function buildDemo() {
   const DP3 = mkContract({ no: 'ДП-ОГ/ВАЗ-2026', signed: MB('2025-12-20'), assetId: 'A3', procId: 'P2', productId: 'PT-DORE', dateFrom: MB('2026-01-01'), dateTo: MB('2026-12-31'), rules: 'B', conds: COND_DORE_FULL, volumeAu: 300000, volumeAg: 900000 });
   const DP4 = mkContract({ no: 'ДП-ПГ/СМК-2026', signed: MB('2026-02-01'), assetId: 'A4', procId: 'P3', productId: 'PT-CEM', dateFrom: MB('2026-03-01'), dateTo: MB('2027-02-28'), rules: 'C', conds: COND_CEM, volumeAu: null, volumeAg: null });
   const DP5 = mkContract({ no: 'ДП-ПГ/ВАЗ-2026', signed: MB('2026-02-05'), assetId: 'A4', procId: 'P2', productId: 'PT-DORE', dateFrom: MB('2026-03-01'), dateTo: MB('2027-02-28'), rules: 'B', volumeAu: 80000, volumeAg: 250000 });
-  const DP6 = mkContract({ no: 'ДП-КП/ВАЗ-2026', signed: MB('2025-12-22'), assetId: 'A5', procId: 'P2', productId: 'PT-DORE', dateFrom: MB('2026-01-01'), dateTo: MB('2026-12-31'), rules: 'E', volumeAu: 200000, volumeAg: 600000, comment: 'Правила «Купол»: Au 80 % через 12 р.д., финал через 16; Ag 100 % через 20 р.д.' });
-  const DP7 = mkContract({ no: 'ДП-ЗГ/ПАЗ-2026', signed: MB('2025-12-25'), assetId: 'A6', procId: 'P1', productId: 'PT-DORE', dateFrom: MB('2026-01-01'), dateTo: MB('2026-12-31'), rules: 'D', volumeAu: 120000, volumeAg: 400000, comment: 'Au 95 % через 5 р.д. + финал через 10; Ag — одним финальным начислением через 20 р.д.' });
+  const DP6 = mkContract({ no: 'ДП-КП/ВАЗ-2026', signed: MB('2025-12-22'), assetId: 'A5', procId: 'P2', productId: 'PT-DORE', dateFrom: MB('2026-01-01'), dateTo: MB('2026-12-31'), rules: 'E', volumeAu: 200000, volumeAg: 600000, comment: 'Нетиповые правила (исключение для демонстрации): Au 80 % через 12 р.д., финал через 16; Ag 100 % через 20 р.д.' });
+  const DP7 = mkContract({ no: 'ДП-ЗГ/ПАЗ-2026', signed: MB('2025-12-25'), assetId: 'A6', procId: 'P1', productId: 'PT-DORE', dateFrom: MB('2026-01-01'), dateTo: MB('2026-12-31'), rules: 'D', volumeAu: 120000, volumeAg: 400000, comment: 'Типовые правила: Au 95 % через 5 р.д. + финал через 10; Ag — одним финальным начислением через 20 р.д.' });
   const DP8 = mkContract({ no: 'ДП-ЛГ/ВАЗ-2026', signed: MB('2026-01-12'), assetId: 'A7', procId: 'P2', productId: 'PT-DORE', dateFrom: MB('2026-02-01'), dateTo: MB('2027-01-31'), rules: 'B', volumeAu: 100000, volumeAg: 300000 });
   const DP9 = mkContract({ no: 'ДП-ЛГ/ВАЗ-К-2026', signed: MB('2026-03-15'), assetId: 'A7', procId: 'P2', productId: 'PT-CONC', dateFrom: MB('2026-04-01'), dateTo: MB('2027-03-31'), rules: 'F', conds: COND_CONC, volumeAu: null, volumeAg: null, comment: 'Концентрат: обычный ЖД-транспорт, извлечение ниже, срок дольше' });
   mkContract({ no: 'ДП-ТГ/ПАЗ-2025', signed: MB('2024-12-10'), assetId: 'A1', procId: 'P1', productId: 'PT-DORE', dateFrom: MB('2025-01-01'), dateTo: MB('2025-12-31'), rules: 'A', volumeAu: 350000, volumeAg: 1200000, status: 'Завершён' });
@@ -1982,6 +1984,14 @@ function confirmDialog(title, text, onOk, okLabel = 'Подтвердить') {
   o.querySelector('#okBtn').onclick = () => { closeModal(); onOk(); };
 }
 
+/* autoField: расчётное поле формы — подставляется из других полей, пока пользователь не ввёл своё значение (тогда его не трогаем) */
+function autoField(form, v, name, calc) {
+  if (!form) return;
+  const el = form.elements[name]; if (!el) return;
+  if (!el.dataset.autoWired) { el.dataset.autoWired = '1'; el.addEventListener('input', () => { el.dataset.dirty = el.value === '' ? '' : '1'; }); }
+  if (el.dataset.dirty) return;
+  const val = calc(v); el.value = val == null || isNaN(val) ? '' : val; v[name] = val == null || isNaN(val) ? null : val;
+}
 /* openForm: универсальная форма с живым пересчётом
    cfg: {title, tag, wide, fields:[{name,label,type,options,value,required,hint,readonly,step,min,max,full}], live(values)->html, submit(values), submitLabel, note} */
 function openForm(cfg) {
@@ -2361,16 +2371,18 @@ function formNewShipment() {
 function formAddLot(sh) {
   openForm({
     title: `Добавить лот в отгрузку ${sh.id}`, tag: stage('mvp2', 'А1'),
-    note: `<div class="note info">По спецификации вводятся три величины без взаимных проверок: лигатурная масса, концентрация и масса каждого металла. Масса металла по умолчанию считается как лигатурная × концентрация, её можно поправить.</div>`,
+    note: `<div class="note info">Из спецификации ГОКа переносятся три величины: лигатурная масса, концентрация и масса каждого металла. По ТЗ они вводятся без взаимных проверок — масса в спецификации может отличаться от лигатурная × концентрация из-за округлений. Поэтому массы подставляются расчётом и остаются редактируемыми.</div>`,
     fields: [
       { name: 'ligMass', label: 'Лигатурная масса, г', type: 'number', step: '0.1', required: true, value: 40000 },
       { name: 'spec', label: 'Файл спецификации', type: 'text', value: `Спецификация ${sh.id}-${lotsOf(sh.id).length + 1}.pdf`, hint: 'имитация вложения' },
       { name: 'Au_conc', label: 'Au: концентрация, %', type: 'number', step: '0.01', required: true, value: 71.5 },
-      { name: 'Au_mass', label: 'Au: масса, г', type: 'number', step: '0.1', hint: 'пусто — рассчитать' },
+      { name: 'Au_mass', label: 'Au: масса по спецификации, г', type: 'number', step: '0.1', hint: 'подставлено лигатурная × концентрация; поправьте, если в спецификации другая' },
       { name: 'Ag_conc', label: 'Ag: концентрация, %', type: 'number', step: '0.01', required: true, value: 24.8 },
-      { name: 'Ag_mass', label: 'Ag: масса, г', type: 'number', step: '0.1', hint: 'пусто — рассчитать' },
+      { name: 'Ag_mass', label: 'Ag: масса по спецификации, г', type: 'number', step: '0.1', hint: 'подставлено лигатурная × концентрация; поправьте, если в спецификации другая' },
     ],
-    live: v => {
+    live: (v, form) => {
+      // массы по спецификации подставляются автоматически, пока пользователь не ввёл свои
+      METALS.forEach(m => autoField(form, v, m + '_mass', x => r1((x.ligMass || 0) * (x[m + '_conc'] || 0) / 100) || null));
       const c = findProcContract(sh.assetId, sh.procId, sh.productId, sh.sentFact);
       const chem = { Au_conc: v.Au_conc, Ag_conc: v.Ag_conc };
       const cond = c ? pickCondition(c.id, chem) : null;
@@ -2487,14 +2499,19 @@ function viewLot(id) {
 function formChem(l, cut) {
   const title = cut === 'proc' ? 'Показатели переработчика по документам приёмки' : 'Показатели арбитража (экспертной организации)';
   const cur = c => l[c] != null ? l[c] : '';
+  // предзаполнение для разреза переработчика: химия завода обычно чуть ниже нашей (в пределах порога арбитража), выход — по его химии × извлечение
+  const cond = l.condPlanId ? byId('conditions', l.condPlanId) : null;
+  const delta = { Au: -0.08, Ag: -0.05 };
+  const def = m => cut === 'proc' && cur(m + '_conc_proc') === '' ? { conc: r2(l[m + '_conc_our'] + delta[m]), yld: r1(l.ligMass * (l[m + '_conc_our'] + delta[m]) / 100 * (cond ? cond[m + '_extr'] : 99) / 100) } : null;
+  const dAu = def('Au'), dAg = def('Ag');
   openForm({
     title: `${title}: лот ${l.id}`, tag: stage('mvp1'),
     note: cut === 'proc' ? `<div class="note info">Химия переработчика сравнивается с нашей по справочнику «Пороги арбитража» (А7). Итоговый выход по каждому металлу вносится из документа переработчика, а не вычисляется.</div>` : `<div class="note info">Арбитраж необязателен и предусмотрен внутренними правилами. Решение об экспертизе принимает сотрудник; автоматизации проверяют только признак подтверждения итоговых показателей.</div>`,
     fields: [
-      { name: 'Au_conc', label: 'Au: концентрация, %', type: 'number', step: '0.01', required: true, value: cur('Au_conc_' + cut) || l.Au_conc_our },
-      { name: 'Au_yield', label: 'Au: итоговый выход, г', type: 'number', step: '0.1', required: true, value: cur('Au_yield_' + cut) || l.Au_yield_plan },
-      { name: 'Ag_conc', label: 'Ag: концентрация, %', type: 'number', step: '0.01', required: true, value: cur('Ag_conc_' + cut) || l.Ag_conc_our },
-      { name: 'Ag_yield', label: 'Ag: итоговый выход, г', type: 'number', step: '0.1', required: true, value: cur('Ag_yield_' + cut) || l.Ag_yield_plan },
+      { name: 'Au_conc', label: 'Au: концентрация, %', type: 'number', step: '0.01', required: true, value: dAu ? dAu.conc : (cur('Au_conc_' + cut) || l.Au_conc_our), hint: dAu ? `наша химия ${l.Au_conc_our} %` : '' },
+      { name: 'Au_yield', label: 'Au: итоговый выход, г', type: 'number', step: '0.1', required: true, value: dAu ? dAu.yld : (cur('Au_yield_' + cut) || l.Au_yield_plan), hint: dAu ? `плановый выход по нашей химии ${fmtG(l.Au_yield_plan)}` : '' },
+      { name: 'Ag_conc', label: 'Ag: концентрация, %', type: 'number', step: '0.01', required: true, value: dAg ? dAg.conc : (cur('Ag_conc_' + cut) || l.Ag_conc_our), hint: dAg ? `наша химия ${l.Ag_conc_our} %` : '' },
+      { name: 'Ag_yield', label: 'Ag: итоговый выход, г', type: 'number', step: '0.1', required: true, value: dAg ? dAg.yld : (cur('Ag_yield_' + cut) || l.Ag_yield_plan), hint: dAg ? `плановый выход по нашей химии ${fmtG(l.Ag_yield_plan)}` : '' },
     ],
     live: v => { const th = DB.arbThresholds; return METALS.map(m => { const d = r2((v[m + '_conc'] || 0) - l[m + '_conc_our']); const bad = Math.abs(d) > th.find(t => t.metal === m).value; return `<div class="lr"><span>${m}: масса по химии ${fmtG(r1(l.ligMass * (v[m + '_conc'] || 0) / 100))}, расхождение с нашей концентрацией</span><b class="${bad ? 'neg' : ''}">${d > 0 ? '+' : ''}${fmtNum(d, 2)} п.п.${bad ? ' — выше порога' : ''}</b></div>`; }).join(''); },
     submit: v => { setProcChem(l, cut, { Au_conc: v.Au_conc, Au_mass: r1(l.ligMass * v.Au_conc / 100), Au_yield: v.Au_yield, Ag_conc: v.Ag_conc, Ag_mass: r1(l.ligMass * v.Ag_conc / 100), Ag_yield: v.Ag_yield }); logEvent('lot', l.id, (cut === 'proc' ? 'Внесены показатели переработчика' : 'Внесены показатели арбитража') + (l.arbitrationRequired ? '; расхождение выше порога — требуется арбитраж' : '')); toast('Показатели сохранены' + (l.arbitrationRequired && cut === 'proc' ? '. Расхождение выше порога: лот помечен «Требуется арбитраж»' : ''), l.arbitrationRequired && cut === 'proc' ? 'warn' : 'ok'); },
@@ -2902,10 +2919,11 @@ function formAddContract(d) {
       { name: 'pickupLocId', label: 'Место забора', type: 'select', options: DB.locations.filter(l => l.type !== 'asset').concat(DB.locations.filter(l => l.type === 'asset')).map(l => ({ value: l.id, label: l.name })), value: d.pickupLocId, required: true },
       { name: 'date', label: 'Дата контракта', type: 'date', value: DB.today, required: true, max: DB.today, hint: 'дата списания; не позже учётной' },
       { name: 'ligMass', label: 'Лигатурная масса, г', type: 'number', step: '0.1', required: true, value: d.metal === 'Au' ? 12002.4 : 20014 },
-      { name: 'fineness', label: 'Проба, %', type: 'number', step: '0.01', required: true, value: d.metal === 'Au' ? 99.98 : 99.93 },
-      { name: 'mass', label: 'Масса итоговая (хим. чистая), г', type: 'number', step: '0.1', hint: 'пусто — лигатурная × проба' },
+      { name: 'fineness', label: 'Проба, %', type: 'number', step: '0.01', required: true, value: 99.99, hint: 'чистота аффинированного металла по паспорту завода; 99,99 % по умолчанию' },
+      { name: 'mass', label: 'Масса итоговая (хим. чистая), г', type: 'number', step: '0.1', hint: 'подставлено лигатурная × проба; поправьте по паспорту слитков, если отличается' },
     ],
-    live: v => {
+    live: (v, form) => {
+      autoField(form, v, 'mass', x => r1((x.ligMass || 0) * (x.fineness || 0) / 100) || null);
       const mass = v.mass != null ? v.mass : r1((v.ligMass || 0) * (v.fineness || 0) / 100);
       const acc = v.assetId && v.pickupLocId ? findAccountByLoc(v.assetId, v.pickupLocId, d.metal) : null;
       const loc = locById(v.pickupLocId);
@@ -3048,13 +3066,14 @@ function formNewTransfer() {
       { name: 'carrierId', label: 'Спецперевозчик', type: 'select', options: optCarriers(), required: true },
       { name: 'date', label: 'Дата перемещения', type: 'date', value: DB.today, required: true, max: DB.today },
       { name: 'ligMass', label: 'Лигатурная масса, г', type: 'number', step: '0.1', value: 12002.4 },
-      { name: 'Au_fineness', label: 'Au: проба, %', type: 'number', step: '0.01', value: 99.98, hint: 'пусто — металл не перемещается' },
-      { name: 'Au_mass', label: 'Au: хим. чистая масса, г', type: 'number', step: '0.1', hint: 'пусто — лигатурная × проба' },
+      { name: 'Au_fineness', label: 'Au: проба, %', type: 'number', step: '0.01', value: 99.99, hint: 'пусто — металл не перемещается' },
+      { name: 'Au_mass', label: 'Au: хим. чистая масса, г', type: 'number', step: '0.1', hint: 'подставлено лигатурная × проба; можно поправить' },
       { name: 'Ag_fineness', label: 'Ag: проба, %', type: 'number', step: '0.01', hint: 'пусто — металл не перемещается' },
-      { name: 'Ag_mass', label: 'Ag: хим. чистая масса, г', type: 'number', step: '0.1' },
+      { name: 'Ag_mass', label: 'Ag: хим. чистая масса, г', type: 'number', step: '0.1', hint: 'подставлено лигатурная × проба; можно поправить' },
       { name: 'comment', label: 'Комментарий', type: 'text', full: true },
     ],
-    live: v => {
+    live: (v, form) => {
+      METALS.forEach(m => autoField(form, v, m + '_mass', x => x[m + '_fineness'] != null ? r1((x.ligMass || 0) * x[m + '_fineness'] / 100) || null : null));
       let out = '';
       const from = locById(v.fromLocId), to = locById(v.toLocId);
       if (from && to && from.type === 'processor' && !isRefinery(from.ownerProc) && to.type === 'processor') return `<span class="neg">Со счёта промежуточного переработчика на локацию переработчика — это отгрузка МПФ на следующий этап. Сохранение будет заблокировано (8.4.1).</span>`;
