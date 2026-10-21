@@ -679,6 +679,22 @@ body.theme-elma table.tbl td .badge+.badge{margin-left:6px}
 body.theme-elma table.tbl th{white-space:normal;line-height:1.2;max-width:120px}
 body.theme-elma table.tbl td:has(.badge),body.theme-elma table.tbl td:first-child{max-width:none}
 
+/* экран входа */
+.login{position:fixed;inset:0;z-index:500;background:var(--bg);display:flex;align-items:center;justify-content:center}
+.login-box{width:420px;max-width:calc(100% - 32px);background:#fff;border:1px solid var(--line);border-radius:12px;padding:32px 36px 26px;box-shadow:0 12px 40px rgba(20,30,60,.12);display:flex;flex-direction:column;gap:8px}
+.login-logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:20px;margin-bottom:14px}
+.login-logo .elogo{width:36px;height:36px}
+.login-title{font-size:22px;font-weight:600}
+.login-sub{color:var(--muted);font-size:13px;margin-bottom:14px}
+.login-l{font-size:12.5px;color:var(--muted);margin-top:4px}
+.login select{width:100%;height:40px;font-size:14px;padding:0 10px;border:1px solid var(--line2);border-radius:8px;background:#fff}
+.login-btn{height:40px;font-size:14px;margin-top:10px;margin-bottom:6px;width:100%}
+.login-note{font-size:12px;color:var(--muted2);line-height:1.45;margin-top:10px}
+body.theme-elma .login{background:#eef2f7}
+body.theme-elma .login-box{border-radius:6px;box-shadow:0 2px 12px rgba(0,0,0,.08)}
+body.theme-elma .login select{border-radius:4px}
+.user-menu .sep{height:1px;background:var(--line);margin:6px 0}
+
 </style>
 </head>
 <body>
@@ -4203,7 +4219,7 @@ function renderTop() {
     <a class="today" data-act="setToday" title="Учётная дата прототипа — «сегодня». Нажмите, чтобы сдвинуть время вперёд и увидеть, как планировщик исполняет начисления">Учётная дата: <b>${fmtD(DB.today)}</b> <span class="muted">▸</span></a>
     <a class="help elma-only" href="#/about" title="О прототипе: легенда, допущения, что сделано сверх ТЗ">?</a>
     <span class="menu-wrap"><button class="user" data-menu title="${esc(u.name)} — ${esc(u.roleName)}${u.groupId ? ', ' + esc(group(u.groupId).name) : ''}. Нажмите, чтобы переключить пользователя"><span class="avatar">${esc(u.name.split(' ').map(s => s[0]).join(''))}</span><span class="uinfo elma-only"><b>${esc(u.name)}</b><small>${esc(u.roleName)}${u.groupId ? ' · ' + esc(group(u.groupId).name) : ''}</small></span><span class="caret">▾</span></button>
-    <div class="menu hidden user-menu"><div class="hd">Войти как</div>${DB.users.map(x => `<div data-act="switchUser" data-id="${x.id}" class="${x.id === u.id ? 'cur' : ''}"><span class="avatar sm">${esc(x.name.split(' ').map(s => s[0]).join(''))}</span><span><b>${esc(x.name)}</b><br><span class="muted small">${esc(x.roleName)}${x.groupId ? ' · ' + esc(group(x.groupId).name) : ' · вся компания'}</span></span>${x.id === u.id ? '<span class="chk">✓</span>' : ''}</div>`).join('')}</div></span>
+    <div class="menu hidden user-menu"><div class="hd">Войти как</div>${DB.users.map(x => `<div data-act="switchUser" data-id="${x.id}" class="${x.id === u.id ? 'cur' : ''}"><span class="avatar sm">${esc(x.name.split(' ').map(s => s[0]).join(''))}</span><span><b>${esc(x.name)}</b><br><span class="muted small">${esc(x.roleName)}${x.groupId ? ' · ' + esc(group(x.groupId).name) : ' · вся компания'}</span></span>${x.id === u.id ? '<span class="chk">✓</span>' : ''}</div>`).join('')}<div class="sep"></div><div data-act="logout">Выйти</div></div></span>
     ${DB.mode === 'clean' ? '<span class="badge violet" title="Документов не было — всё, что вы видите, заведено вами">чистая система</span>' : ''}
     <button class="btn sm" id="resetBtn" title="Загрузить демонабор или пустую систему">Сбросить данные</button>`;
   renderSyncBadge();
@@ -4303,6 +4319,7 @@ function runAction(act, r, el) {
     case 'statusLot': return formSetStatus('lot', lot(id), ['Отправлена', 'Прибыла', 'Завершена переработка', 'Отмена отправки']);
     case 'runSchedule': return wrap(() => { const n = autoExecuteAccruals(); toast(n ? `Планировщик А31: исполнено начислений — ${n}, металл зачислен на счета УМС` : 'Наступивших начислений нет', n ? 'ok' : ''); });
     case 'setToday': return formSetToday();
+    case 'logout': if (document.getElementById('cardOverlay')) closeCard(); closeModal(); showLogin(); return;
     case 'switchUser': DB.currentUserId = el.dataset.id; persist(); render(); toast('Пользователь: ' + user(DB.currentUserId).name, '', 2500); return;
     case 'resetData': return formResetData();
     case 'newAccrualLot': return formNewAccrual(id);
@@ -4376,6 +4393,24 @@ document.addEventListener('input', e => { const s = e.target.closest('[data-sear
 document.addEventListener('keydown', e => { if (e.key === 'Escape') { const hadForm = !!document.getElementById('overlay'); closeModal(); document.querySelectorAll('.menu').forEach(m => m.classList.add('hidden')); if (!hadForm && document.getElementById('cardOverlay')) closeCard(); } });
 window.addEventListener('hashchange', () => { if (location.hash && location.hash !== UI.route) { UI.route = location.hash; closeModal(); render(); } });
 
+/* ---------- экран входа (имитация: выбор пользователя-профиля) ---------- */
+function showLogin() {
+  const old = document.getElementById('login'); if (old) old.remove();
+  const el = document.createElement('div'); el.id = 'login'; el.className = 'login';
+  const u = user(DB.currentUserId);
+  el.innerHTML = `<div class="login-box">
+    <div class="login-logo">${ELMA_LOGO}<span>ELMA365</span></div>
+    <label class="login-l">Войти как</label>
+    <select id="loginUser">${DB.users.map(x => `<option value="${x.id}" ${x.id === u.id ? 'selected' : ''}>${esc(x.name)} — ${esc(x.roleName)}${x.groupId ? ' · ' + esc(group(x.groupId).name) : ' · вся компания'}</option>`).join('')}</select>
+    <button class="btn primary login-btn" id="loginBtn">Войти</button>
+  </div>`;
+  document.body.appendChild(el);
+  const enter = () => { DB.currentUserId = el.querySelector('#loginUser').value; persist(); el.remove(); UI.route = '#/overview'; location.hash = '#/overview'; render(); toast('Вы вошли как ' + user(DB.currentUserId).name, 'ok', 2500); };
+  el.querySelector('#loginBtn').onclick = enter;
+  el.addEventListener('keydown', e => { if (e.key === 'Enter') enter(); });
+  el.querySelector('#loginUser').focus();
+}
+
 /* ---------- старт ---------- */
 (function start() {
   loadRemoteCfg();
@@ -4384,6 +4419,7 @@ window.addEventListener('hashchange', () => { if (location.hash && location.hash
   loadTheme();
   UI.route = (location.hash && location.hash.startsWith('#/')) ? location.hash : '#/overview';
   render();
+  if (!/nologin/.test(location.search)) showLogin();   // ?nologin — для автотестов
   if (REMOTE_ENABLED && REMOTE.url) { remoteLoad({ silent: true }).then(ok => { render(); if (ok) toast('Данные загружены из Google Таблиц', 'ok'); else toast('Google Таблицы недоступны: ' + (REMOTE.error || '') + '. Показаны данные из этого браузера.', 'err', 9000); }); }
   else if (advanced) toast(`Учётная дата продвинута с ${fmtD(advanced.from)} до сегодня (${fmtD(DB.today)}); планировщик исполнил начислений: ${advanced.n}.`, 'ok', 8000);
   else if (UI.savedAt) toast('Загружено сохранённое состояние из этого браузера (' + fmtDT(UI.savedAt) + '). «Сбросить демоданные» вернёт исходный набор.', '', 6000);
