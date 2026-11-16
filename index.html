@@ -749,6 +749,14 @@ body.theme-elma .form .frow .fld label{text-align:left;justify-self:start;paddin
 .att-file:hover{text-decoration:underline}
 body.theme-elma .att-chip{border-radius:6px}
 
+/* строки происхождения в контракте продажи (v1.8) */
+.or-rows{width:100%;margin:0;table-layout:fixed}
+.or-rows th:nth-child(1){width:34%}.or-rows th:nth-child(2){width:26%}.or-rows th:nth-child(3){width:13%}.or-rows th:nth-child(4){width:14%}.or-rows th:nth-child(5){width:8%}.or-rows th:nth-child(6){width:34px}
+.or-rows td{padding:4px 5px;vertical-align:middle}.or-rows th{padding:5px 5px;white-space:nowrap}
+.or-rows td.calc{color:var(--muted)}
+.or-rows input,.or-rows select{width:100%;min-width:0;padding:5px 7px;font-size:13px;box-sizing:border-box}
+.or-rows td.num input{text-align:right}.or-rows .btn.icon{padding:2px 7px;line-height:1}
+
 </style>
 </head>
 <body>
@@ -816,20 +824,27 @@ const payment = id => byId('payments', id);
 const account = id => byId('accounts', id);
 const transfer = id => byId('transfers', id);
 const limit = id => byId('limits', id);
-const source = id => byId('sources', id);
-
-/* ---------- Происхождение металла (v1.6): у ПМ внутри собственника есть источники (своя руда, покупное сырьё);
-   у АР происхождение всегда равно собственнику — источник «собственный» подставляется автоматически ---------- */
+/* ---------- Происхождение металла (v1.9): отдельного справочника нет. Происхождение — ссылка на компанию из справочника «Компании»
+   (у кого металл был раньше); по умолчанию — сам собственник. Поле в документах по-прежнему называется sourceId, значение — id компании.
+   Происхождение = собственник → металл собственный, «без НДС»; иначе покупной, «с НДС». ---------- */
+function source(id) { const a = asset(id); return a ? { id: a.id, code: a.name, name: a.name } : null; }
 function usesOrigins(assetId) { const a = asset(assetId); const g = a && group(a.groupId); return !!(g && g.origins); }
-function ownSource(assetId) {
-  if (!DB.sources) DB.sources = [];
-  let s = DB.sources.find(x => x.assetId === assetId && x.kind === 'own');
-  if (!s) { s = { id: 'ИС-' + assetId, assetId, code: assetId, name: assetName(assetId) + ' — собственный металл', kind: 'own' }; DB.sources.push(s); }
-  return s;
+function ownSource(assetId) { return { id: assetId }; }
+function ownerAssets() { return DB.assets.filter(a => a.groupId); }                       // кто может владеть металлом: активы группы и внешние собственники с группой
+function assetSources(assetId) { const own = asset(assetId); if (!own) return []; return [{ id: own.id, code: 'собственный', name: own.name }, ...DB.assets.filter(a => a.id !== assetId).sort((x, y) => (x.external ? 1 : 0) - (y.external ? 1 : 0) || x.name.localeCompare(y.name, 'ru')).map(a => ({ id: a.id, code: a.external ? 'внешний контур' : 'группа', name: a.name }))]; }
+function originName(id) { return assetName(id); }
+const MINER_TYPE = { own: 'своё', internal: 'внутренний контур', external: 'внешний контур' };
+function sourceMiner(sourceId, ownerId) {
+  const a = asset(sourceId); if (!a) return null;
+  return { type: sourceId === ownerId ? 'own' : a.external ? 'external' : 'internal', assetId: a.id, name: a.name };
 }
-function assetSources(assetId) { ownSource(assetId); return DB.sources.filter(x => x.assetId === assetId); }
-function originName(id) { const s = source(id); return s ? s.name : '—'; }
-function resolveSource(assetId, sourceId) { return usesOrigins(assetId) && sourceId && source(sourceId) && source(sourceId).assetId === assetId ? sourceId : ownSource(assetId).id; }
+function resolveSource(assetId, sourceId) { return usesOrigins(assetId) && sourceId && asset(sourceId) ? sourceId : assetId; }
+function isVat(assetId, sourceId) { return resolveSource(assetId, sourceId) !== assetId; }   // покупной металл — «с НДС»
+const VAT_NAME = v => v ? 'с НДС' : 'без НДС';
+function accountOriginBalance(accId, sourceId, exceptContractId) {
+  const acc = account(accId); if (!acc) return 0; const own = acc.assetId;
+  return r1(sum(DB.transactions.filter(t => t.accountId === accId && (t.sourceId || own) === sourceId && (!exceptContractId || t.contractId !== exceptContractId)), t => t.qty));
+}
 
 function assetName(id) { const a = asset(id); return a ? a.name : '—'; }
 function locName(id) { const l = locById(id); return l ? l.name : '—'; }
@@ -841,29 +856,29 @@ function locOfProcessor(procId) { return DB.locations.find(l => l.ownerProc === 
 function locOfAsset(assetId) { return DB.locations.find(l => l.ownerAsset === assetId); }
 function locOfCarrier(carId) { return DB.locations.find(l => l.ownerCarrier === carId); }
 
-/* ---------- Аффинажный счёт: ключ собственник × тип × локация × металл ---------- */
-function accountKeyFromLocation(assetId, locId, metal) {
+/* ---------- Аффинажный счёт: собственник × НДС/без НДС × локация (переработчик) × металл (v1.9) ---------- */
+function accountKeyFromLocation(assetId, locId, metal, vat) {
   const l = locById(locId);
   if (!l) throw new Error('Локация не найдена: ' + locId);
   const type = l.type;                      // asset | processor | carrier
-  const key = [assetId, type, type === 'asset' ? '' : locId, metal].join('|');
-  return { key, type, locId: type === 'asset' ? null : locId };
+  const key = [assetId, type, locId, metal].join('|') + (vat ? '|НДС' : '');   // локация входит в ключ всегда: металл на чужой площадке — отдельный счёт (v1.9.2)
+  return { key, type, locId };
 }
-function findAccountByLoc(assetId, locId, metal) {
-  const { key } = accountKeyFromLocation(assetId, locId, metal);
+function findAccountByLoc(assetId, locId, metal, vat) {
+  const { key } = accountKeyFromLocation(assetId, locId, metal, vat);
   return DB.accounts.find(a => a.key === key) || null;
 }
-function findOrCreateAccount(assetId, locId, metal) {
-  let acc = findAccountByLoc(assetId, locId, metal);
+function findOrCreateAccount(assetId, locId, metal, vat) {
+  let acc = findAccountByLoc(assetId, locId, metal, vat);
   if (acc) return acc;
-  const { key, type, locId: lid } = accountKeyFromLocation(assetId, locId, metal);
-  acc = { id: nextNo('АФС', 3), key, assetId, type, locId: lid, metal, balance: 0 };
+  const { key, type, locId: lid } = accountKeyFromLocation(assetId, locId, metal, vat);
+  acc = { id: nextNo('АФС', 3), key, assetId, type, locId: lid, metal, vat: !!vat, balance: 0 };
   DB.accounts.push(acc);
   return acc;
 }
 function accountName(acc) {
-  const typeName = { asset: 'площадка собственника', processor: locName(acc.locId), carrier: locName(acc.locId) }[acc.type];
-  return `${assetName(acc.assetId)} · ${typeName} · ${acc.metal}`;
+  const typeName = locName(acc.locId);
+  return `${assetName(acc.assetId)} · ${typeName} · ${acc.metal} · ${VAT_NAME(acc.vat)}`;
 }
 function accountTxs(accId) { return DB.transactions.filter(t => t.accountId === accId); }
 function balanceOnDate(accId, dateIso) { return r1(sum(accountTxs(accId).filter(t => t.date <= dateIso), t => t.qty)); }
@@ -917,8 +932,11 @@ function limitInstalled(l) { return r1(l.volume + sum(DB.limitAdjustments.filter
 function limitUsed(l) {
   const sc = DB.salesContracts.filter(c => c.limitId === l.id && c.status !== 'Отменена');
   const tr = DB.transfers.filter(t => t.status === 'Проведено' && t[l.metal + '_limitId'] === l.id);
-  return r1(sum(sc, c => c.mass) + sum(tr, t => t[l.metal + '_mass']));
+  return r1(sum(sc, contractLig) + sum(tr, t => transferLig(t, l.metal)));
 }
+/* Лимит (экспортная лицензия) считается в лигатурной массе (Таня, 05.11) */
+function contractLig(c) { return c.ligMass != null ? c.ligMass : c.fineness ? r1(c.mass / c.fineness * 100) : c.mass; }
+function transferLig(t, m) { const mass = t[m + '_mass'] || 0; if (!mass) return 0; const f = t[m + '_fineness']; return f ? r1(mass / f * 100) : (t.ligMass || mass); }
 function limitRemaining(l) { return r1(limitInstalled(l) - limitUsed(l)); }
 function limitPct(l) { const i = limitInstalled(l); return i > 0 ? Math.round(limitUsed(l) / i * 1000) / 10 : 0; }
 
@@ -950,8 +968,8 @@ function postLot(lotObj) {
     METALS.forEach(m => {
       const mass = lotObj[m + '_mass_our'];
       if (mass > 0) {
-        const acc = findOrCreateAccount(lotObj.assetId, sh.fromLocId, m);
-        wanted.push({ accountId: acc.id, qty: -mass, date: sh.sentFact, sourceId: lotObj.sourceId || ownSource(lotObj.assetId).id, comment: 'Отправка партии на следующий этап переработки' });
+        const acc = findOrCreateAccount(lotObj.assetId, sh.fromLocId, m, isVat(lotObj.assetId, lotObj.sourceId));
+        wanted.push({ accountId: acc.id, qty: -mass, date: sh.sentFact, sourceId: resolveSource(lotObj.assetId, lotObj.sourceId), comment: 'Отправка партии на следующий этап переработки' });
       }
     });
   }
@@ -1011,7 +1029,7 @@ function acceptShipment(sh, dateIso) {
     let lotEnd = null;
     contractRules(contract.id).forEach(rule => {
       if (l[rule.metal + '_mass_our'] <= 0) return;
-      const acc = findOrCreateAccount(l.assetId, procLoc.id, rule.metal);
+      const acc = findOrCreateAccount(l.assetId, procLoc.id, rule.metal, isVat(l.assetId, l.sourceId));
       const planDate = addBusinessDays(dateIso, rule.days);
       const yieldPlan = l[rule.metal + '_yield_plan'];
       let planMass;
@@ -1159,7 +1177,7 @@ function forecastAccruals(filter) {
         const yieldPlan = r1(mass * cond[rule.metal + '_extr'] / 100);
         const prel = rules.filter(r => r.metal === rule.metal && r.type === 'prelim');
         const planMass = rule.type === 'prelim' ? r1(yieldPlan * rule.share / 100) : r1(yieldPlan - sum(prel, r => r1(yieldPlan * r.share / 100)));
-        const acc = findAccountByLoc(l.assetId, procLoc.id, rule.metal);
+        const acc = findAccountByLoc(l.assetId, procLoc.id, rule.metal, isVat(l.assetId, l.sourceId));
         out.push({ id: `ПРОГ ${l.id} ${rule.metal}${rule.type === 'prelim' ? '-' + rule.seq : '-ф'}`, forecast: true, lotId: l.id, shipmentId: sh.id, assetId: l.assetId, procId: sh.procId, locId: procLoc.id, sourceId: l.sourceId || ownSource(l.assetId).id, metal: rule.metal, type: rule.type, seq: rule.seq, accountId: acc ? acc.id : null, planDate: addBusinessDays(acc0, rule.days), planMass, calcMass: null, factDate: null, factMass: null, status: 'Прогноз', acceptDate: acc0, shipStatus: sh.status });
       });
     });
@@ -1187,7 +1205,7 @@ function addLot(sh, chem) {
   if (!['Отправлена', 'Прибыла', 'Планируется'].includes(sh.status)) throw new Error(`Партии добавляются до приёмки в переработку (статус отгрузки «${sh.status}»). После приёмки состав отгрузки меняет администратор через «Изменить».`);
   const assetId = chem.assetId || defaultLotAsset(sh);
   if (!asset(assetId)) throw new Error('Не указан собственник партии.');
-  { const from = locById(sh.fromLocId); if (from.type === 'processor') { METALS.forEach(m => { const mass = chem[m + '_mass'] != null ? chem[m + '_mass'] : r1((chem.ligMass || 0) * (chem[m + '_conc'] || 0) / 100); if (mass > 0) { const acc = findAccountByLoc(assetId, sh.fromLocId, m); const avail = acc ? acc.balance : 0; if (mass > avail + 0.05) throw new Error(`${m}: по нашей химии в партии ${fmtKg(mass)}, а на счёте ${assetName(assetId)} × ${from.name} только ${fmtKg(avail)}. С промежуточного переработчика нельзя отправить больше, чем начислено (А4).`); } }); } }
+  { const from = locById(sh.fromLocId); if (from.type === 'processor') { METALS.forEach(m => { const mass = chem[m + '_mass'] != null ? chem[m + '_mass'] : r1((chem.ligMass || 0) * (chem[m + '_conc'] || 0) / 100); if (mass > 0) { const acc = findAccountByLoc(assetId, sh.fromLocId, m, isVat(assetId, chem.sourceId)); const avail = acc ? acc.balance : 0; if (mass > avail + 0.05) throw new Error(`${m}: по нашей химии в партии ${fmtKg(mass)}, а на счёте ${assetName(assetId)} × ${from.name} только ${fmtKg(avail)}. С промежуточного переработчика нельзя отправить больше, чем начислено (А4).`); } }); } }
   const n = DB.lots.filter(l => l.shipmentId === sh.id).length + 1;
   const specNo = chem.specNo || `СП-${sh.id.replace('ОТ-', '')}-${specsOf(sh.id).length + 1}`;
   const l = { id: sh.id + '/' + n, shipmentId: sh.id, assetId, groupId: asset(assetId).groupId, sourceId: resolveSource(assetId, chem.sourceId), status: sh.status === 'Отмена отправки' ? 'Отмена отправки' : sh.status, outputProductId: sh.outputProductId, ligMass: chem.ligMass, procContractId: null, condPlanId: null, condFinalId: null, finalConfirmed: false, finalSource: null, arbitrationRequired: false, processingCost: null, endPlan: null, endFact: null, specNo, specOur: chem.specOur || `Спецификация ${specNo}.pdf`, shareAu: chem.shareAu != null ? chem.shareAu : 100, shareAg: chem.shareAg != null ? chem.shareAg : 100, docs: [] };
@@ -1250,7 +1268,16 @@ function setProcChem(l, cut, chem) {
 /* ---------- Сделки и контракты ---------- */
 function dealMetal(c) { const d = deal(c.dealId); return d ? d.metal : null; }
 function dealQuote(d) { return r2(d.exchangeQuote * (1 + d.discount / 100)); }
-function contractCostUSD(c) { return r2(c.quote * c.mass / OZ); }
+const PRICE_BASIS = { chem: 'за грамм ХЧ', lig: 'за грамм лигатуры' };
+function priceBasis(c) { const d = deal(c.dealId); return d && d.priceBasis === 'lig' ? 'lig' : 'chem'; }
+function contractPriceMass(c) { return priceBasis(c) === 'lig' ? contractLig(c) : c.mass; }   // масса, от которой считается цена
+function contractCostUSD(c) { return r2(c.quote * contractPriceMass(c) / OZ); }
+/* Строки происхождения контракта: масса ХЧ по каждой линии; деньги делятся пропорционально массе (цена одна) */
+function contractOrigins(c) { return c.origins && c.origins.length ? c.origins : [{ sourceId: resolveSource(c.assetId, c.sourceId), mass: c.mass }]; }
+function contractOriginRows(c) {
+  const cost = contractCostUSD(c), costCur = contractCostCur(c), os = contractOrigins(c);
+  return os.map(o => { const k = c.mass ? o.mass / c.mass : 0; const mn = sourceMiner(o.sourceId, c.assetId) || {}; return { contract: c, sourceId: o.sourceId, mass: o.mass, share: r2(k * 100), usd: r2(cost * k), cur: r2(costCur * k), minerType: mn.type, minerAssetId: mn.assetId, minerName: mn.name }; });
+}
 function contractCostCur(c) { return r2(contractCostUSD(c) * c.rate); }
 function contractPayments(cid) { return DB.payments.filter(p => p.contractId === cid); }
 function paymentCoveredUSD(p) { return p.status === 'Поступила' && p.factRub != null && p.payRate ? r2(p.factRub / p.payRate) : 0; }
@@ -1290,21 +1317,24 @@ function createDeal(data) {
 }
 function postSalesContract(c, opts = {}) { // А12
   const d = deal(c.dealId);
-  const acc = findAccountByLoc(c.assetId, c.pickupLocId, d.metal);
+  if (c.status !== 'Отменена') normalizeContractOrigins(c);
+  const acc = findAccountByLoc(c.assetId, c.pickupLocId, d.metal, !!c.vat);
   const warnings = [];
   if (c.status !== 'Отменена') {
-    if (!acc) throw new Error(`Счёт-источник ${assetName(c.assetId)} × ${locName(c.pickupLocId)} × ${d.metal} не существует — продавать нечего. Сохранение заблокировано (А12).`);
+    if (!acc) throw new Error(`Счёт-источник ${assetName(c.assetId)} × ${locName(c.pickupLocId)} × ${d.metal} × ${VAT_NAME(c.vat)} не существует — продавать нечего. Сохранение заблокировано (А12).`);
     const own = sum(DB.transactions.filter(t => t.contractId === c.id), t => t.qty); // собственное списание (отрицательное)
     const available = r1(acc.balance - own);
     if (c.mass > available) warnings.push(`Масса контракта ${fmtKg(c.mass)} больше остатка счёта ${accountName(acc)} (доступно ${fmtKg(available)}): остаток станет отрицательным — ${fmtKg(r1(available - c.mass))}. Продажа сверх начисленного по договорённости с заводом не блокируется (решение 27.10), счёт попадёт в «Требует внимания».`);
-    c.accountId = acc.id; c.sourceId = resolveSource(c.assetId, c.sourceId);
-    reconcileTxs('contractId', c.id, [{ accountId: acc.id, qty: -c.mass, date: c.date, sourceId: c.sourceId, comment: 'Контракт продажи ' + c.id + ' (' + client(d.clientId).name + ')' }]);
+    c.accountId = acc.id;
+    if (c.vat && d.saleForm === 'без НДС') warnings.push('Сделка «без НДС», а металл списывается со счёта «с НДС» (покупной): такой металл продаётся только с НДС, на экспорт или в ЕАЭС.');
+    if (c.vat) c.origins.forEach(o => { const av = accountOriginBalance(acc.id, o.sourceId, c.id); if (o.mass > av) warnings.push(`Происхождение ${source(o.sourceId).code}: продаётся ${fmtKg(o.mass)}, на счёте по этой линии ${fmtKg(av)} — линия уйдёт в минус.`); });
+    reconcileTxs('contractId', c.id, c.origins.map(o => ({ accountId: acc.id, qty: -o.mass, date: c.date, sourceId: o.sourceId, comment: 'Контракт продажи ' + c.id + ' (' + client(d.clientId).name + ')' + (c.origins.length > 1 ? ' · ' + source(o.sourceId).code : '') })));
     const loc = locById(c.pickupLocId);
     if (loc.type === 'processor' && isRefinery(loc.ownerProc)) {
       const lim = activeLimit(c.assetId, d.metal);
       c.limitId = lim ? lim.id : null;
       if (!lim) warnings.push(`У ${assetName(c.assetId)} нет действующего лимита по ${d.metal}: ссылка на лимит пуста, операция попадёт в сверку.`);
-      else { const own = DB.salesContracts.includes(c) ? 0 : c.mass; if (limitRemaining(lim) - own < 0) warnings.push(`Лимит ${lim.name} превышен: остаток после контракта ${fmtKg(r1(limitRemaining(lim) - own))}. Завод может не выдать металл; операция не блокируется (8.1.11).`); }
+      else { const own = DB.salesContracts.includes(c) ? 0 : contractLig(c); if (limitRemaining(lim) - own < 0) warnings.push(`Лимит ${lim.name} превышен: остаток после контракта ${fmtKg(r1(limitRemaining(lim) - own))}. Завод может не выдать металл; операция не блокируется (8.1.11).`); }
       const pc = DB.procContracts.filter(x => x.assetId === c.assetId && x.procId === loc.ownerProc && x.status === 'Действует' && x.dateFrom <= c.date && x.dateTo >= c.date && x.volumeAu != null);
       c.procContractId = pc.length ? pc[0].id : null;
       if (!pc.length) warnings.push(`Нет действующего договора переработки с ${procName(loc.ownerProc)} на дату контракта — объём договора не контролируется.`);
@@ -1320,6 +1350,16 @@ function postSalesContract(c, opts = {}) { // А12
   }
   return warnings;
 }
+function normalizeContractOrigins(c) {
+  let os = (c.origins && c.origins.length ? c.origins : [{ sourceId: c.sourceId, mass: c.mass }]).map(o => ({ sourceId: resolveSource(c.assetId, o.sourceId), mass: o.mass == null ? null : r1(o.mass) }));
+  if (os.length === 1) os[0].mass = c.mass;
+  os = os.filter(o => o.mass);
+  if (!os.length) os = [{ sourceId: ownSource(c.assetId).id, mass: c.mass }];
+  const keys = os.map(o => o.sourceId); if (keys.some((k, i) => keys.indexOf(k) !== i)) throw new Error('В контракте две строки с одним происхождением — объедините их.');
+  const vats = os.map(o => o.sourceId !== c.assetId); if (vats.some(v => v !== vats[0])) throw new Error('В одном контракте нельзя смешивать собственный металл (без НДС) и покупной (с НДС): это разные счета. Оформите два контракта.');
+  const tot = r1(sum(os, o => o.mass)); if (Math.abs(tot - c.mass) > 0.06) throw new Error(`Сумма по строкам происхождения ${fmtKg(tot)} не равна массе контракта ${fmtKg(c.mass)}.`);
+  c.origins = os; c.sourceId = os.length === 1 ? os[0].sourceId : null; c.vat = os[0].sourceId !== c.assetId;
+}
 function createSalesContract(d, data) {
   if (d.status !== 'Предварительная' && d.status !== 'Заключена') throw new Error('Контракты добавляются в сделку в статусе «Предварительная» (А11).');
   const c = { id: nextNo('КП', 3), dealId: d.id, status: d.status === 'Заключена' ? 'Заключена' : 'Предварительная', quote: d.quote, exchangeQuote: d.exchangeQuote, discount: d.discount, rate: d.rate, pickupLocId: d.pickupLocId, carrierId: d.carrierId, logistics: d.logistics, consigneeId: d.consigneeId, payTerms: d.payTerms, transferDate: null, receivedDate: null, cancelReason: '', accountId: null, limitId: null, procContractId: null, ...data };
@@ -1334,6 +1374,10 @@ function createSalesContract(d, data) {
 }
 function changeSalesContract(c, data, reason) { // процесс «Изменить» (А38) → перепроведение (А12)
   const before = clone(c);
+  if (!data.origins && data.assetId && data.assetId !== c.assetId) data = { ...data, origins: null, sourceId: null };   // другой продавец — происхождение заново (собственное)
+  if (!data.origins && data.mass != null && data.mass !== c.mass && c.origins && c.origins.length > 1) { // пропорционально, остаток округления — в последнюю строку
+    const k = data.mass / c.mass; const os = c.origins.map(o => ({ sourceId: o.sourceId, mass: r1(o.mass * k) })); os[os.length - 1].mass = r1(data.mass - sum(os.slice(0, -1), o => o.mass)); data = { ...data, origins: os };
+  }
   Object.assign(c, data);
   if (c.date > DB.today) { Object.assign(c, before); throw new Error('Дата контракта не может быть позже учётной даты.'); }
   try { const w = postSalesContract(c); logEvent('contract', c.id, `Изменено (${reason}): масса ${fmtKg(before.mass)} → ${fmtKg(c.mass)}, дата ${fmtD(before.date)} → ${fmtD(c.date)}; контракт перепроведён`); return w; }
@@ -1417,13 +1461,13 @@ function postTransfer(t) {
     METALS.forEach(m => {
       const mass = t[m + '_mass'] || 0;
       if (mass <= 0) return;
-      const src = findAccountByLoc(t.assetId, t.fromLocId, m);
-      if (!src) throw new Error(`Счёт-источник ${assetName(t.assetId)} × ${locName(t.fromLocId)} × ${m} не существует. Сохранение заблокировано (А17).`);
+      const srcId = resolveSource(t.assetId, t.sourceId), vat = srcId !== t.assetId;
+      const src = findAccountByLoc(t.assetId, t.fromLocId, m, vat);
+      if (!src) throw new Error(`Счёт-источник ${assetName(t.assetId)} × ${locName(t.fromLocId)} × ${m} × ${VAT_NAME(vat)} не существует. Сохранение заблокировано (А17).`);
       const own = sum(DB.transactions.filter(x => x.transferId === t.id && x.accountId === src.id), x => x.qty);
       const available = r1(src.balance - own);
       if (mass > available) throw new Error(`Масса ${fmtKg(mass)} ${m} больше остатка счёта ${accountName(src)} (доступно ${fmtKg(available)}). Сохранение заблокировано (А17).`);
-      const dst = findOrCreateAccount(t.assetId, t.toLocId, m);
-      const srcId = resolveSource(t.assetId, t.sourceId);
+      const dst = findOrCreateAccount(t.assetId, t.toLocId, m, vat);
       wanted.push({ accountId: src.id, qty: -mass, date: t.date, sourceId: srcId, comment: 'Перемещение ' + t.id + ' → ' + locName(t.toLocId) });
       wanted.push({ accountId: dst.id, qty: mass, date: t.date, sourceId: srcId, comment: 'Перемещение ' + t.id + ' ← ' + locName(t.fromLocId) });
       if (from.type === 'processor' && isRefinery(from.ownerProc)) {
@@ -1435,7 +1479,7 @@ function postTransfer(t) {
     });
   }
   reconcileTxs('transferId', t.id, wanted);
-  if (t.status === 'Проведено') METALS.forEach(m => { const lim = t[m + '_limitId'] && limit(t[m + '_limitId']); const own = DB.transfers.includes(t) ? 0 : (t[m + '_mass'] || 0); if (lim && limitRemaining(lim) - own < 0) warnings.push(`Лимит ${lim.name} превышен: остаток после перемещения ${fmtKg(r1(limitRemaining(lim) - own))}. Операция не блокируется.`); });
+  if (t.status === 'Проведено') METALS.forEach(m => { const lim = t[m + '_limitId'] && limit(t[m + '_limitId']); const own = DB.transfers.includes(t) ? 0 : transferLig(t, m); if (lim && limitRemaining(lim) - own < 0) warnings.push(`Лимит ${lim.name} превышен: остаток после перемещения ${fmtKg(r1(limitRemaining(lim) - own))}. Операция не блокируется.`); });
   return warnings;
 }
 function createTransfer(data) {
@@ -1452,7 +1496,7 @@ function createTransfer(data) {
 }
 function cancelTransfer(t, reason) {
   if (t.status !== 'Проведено') throw new Error('Перемещение уже отменено.');
-  METALS.forEach(m => { const mass = t[m + '_mass'] || 0; if (mass <= 0) return; const dst = findAccountByLoc(t.assetId, t.toLocId, m); if (dst && dst.balance - mass < -0.05) throw new Error(`Отмена невозможна: со счёта ${accountName(dst)} уже списано ${fmtKg(mass - dst.balance)} из перемещённого металла (продажа или следующее перемещение). Сначала отмените те документы.`); });
+  METALS.forEach(m => { const mass = t[m + '_mass'] || 0; if (mass <= 0) return; const dst = findAccountByLoc(t.assetId, t.toLocId, m, isVat(t.assetId, t.sourceId)); if (dst && dst.balance - mass < -0.05) throw new Error(`Отмена невозможна: со счёта ${accountName(dst)} уже списано ${fmtKg(mass - dst.balance)} из перемещённого металла (продажа или следующее перемещение). Сначала отмените те документы.`); });
   t.status = 'Отменено'; t.cancelReason = reason; postTransfer(t); logEvent('transfer', t.id, 'Отменено: ' + reason);
 }
 /* пересчёт плановых масс неисполненных начислений после изменения нашей химии (А38 → А5/А7) */
@@ -1472,7 +1516,9 @@ function replanAccruals(l) {
 const CORRECTION_REASONS = ['Сверка с переработчиком', 'Шлак по квартальному паспорту', 'Возврат проб', 'Начальный остаток', 'Иное'];
 function addCorrection(acc, qty, dateIso, comment, reason, sourceId) {
   if (dateIso > DB.today) throw new Error('Дата транзакции не может быть позже учётной даты.');
-  DB.transactions.push({ id: nextNo('ТР', 5), type: 'Корректировка', reason: reason || 'Иное', accountId: acc.id, qty: r1(qty), date: dateIso, sourceId: resolveSource(acc.assetId, sourceId), comment, createdAt: DB.nowStamp, author: DB.currentUserId });
+  const srcId = acc.vat ? resolveSource(acc.assetId, sourceId) : acc.assetId;
+  if (acc.vat && srcId === acc.assetId) throw new Error('Счёт «с НДС»: укажите происхождение — компанию, у которой куплен металл.');
+  DB.transactions.push({ id: nextNo('ТР', 5), type: 'Корректировка', reason: reason || 'Иное', accountId: acc.id, qty: r1(qty), date: dateIso, sourceId: srcId, comment, createdAt: DB.nowStamp, author: DB.currentUserId });
   recalcAccount(acc.id);
   logEvent('account', acc.id, `Корректировка (${reason || 'иное'}) ${fmtKg(qty)} датой ${fmtD(dateIso)}: ${comment}`);
 }
@@ -1665,7 +1711,7 @@ function deleteDocument(kind, id) {
 
 /* ---------- справочники ---------- */
 const REF_USAGE = {
-  assets: id => DB.lots.some(l => l.assetId === id) || DB.salesContracts.some(c => c.assetId === id) || DB.accounts.some(a => a.assetId === id) || DB.limits.some(l => l.assetId === id) || DB.procContracts.some(c => c.assetId === id),
+  assets: id => DB.lots.some(l => l.assetId === id) || DB.salesContracts.some(c => c.assetId === id) || DB.accounts.some(a => a.assetId === id) || DB.limits.some(l => l.assetId === id) || DB.procContracts.some(c => c.assetId === id) || DB.lots.some(l => l.sourceId === id) || DB.transactions.some(t => t.sourceId === id),
   groups: id => DB.assets.some(a => a.groupId === id) || DB.users.some(u => u.groupId === id),
   processors: id => DB.shipments.some(s => s.procId === id) || DB.procContracts.some(c => c.procId === id),
   carriers: id => DB.shipments.some(s => s.carrierId === id) || DB.deals.some(d => d.carrierId === id) || DB.transfers.some(t => t.carrierId === id),
@@ -1722,7 +1768,7 @@ function emptyDB() {
   return {
     today: DEMO_TODAY, nowStamp: DEMO_TODAY + 'T09:00', currentUserId: 'U1',
     groups: [], assets: [], processors: [], carriers: [], locations: [], metals: [], productTypes: [], clients: [], users: [],
-    deliveryTerms: [], arbThresholds: [], calendar: [], sources: [], params: { payTolerance: 100 },
+    deliveryTerms: [], arbThresholds: [], calendar: [], sources: [], schemaV: 19, params: { payTolerance: 100 },
     procContracts: [], conditions: [], rules: [],
     shipments: [], lots: [], accruals: [],
     deals: [], salesContracts: [], payments: [],
@@ -1755,17 +1801,11 @@ function buildDemo() {
     { id: 'A6', name: 'Зареченский ГОК', legal: 'ООО «Зареченский ГОК», ИНН 0000000006', groupId: 'G2' },
     { id: 'A7', name: 'Лунный ГОК', legal: 'АО «Лунный ГОК», ИНН 0000000007', groupId: 'G2' },
     { id: 'A8', name: 'ТОО «Казахалтын»', legal: 'ТОО «Казахалтын», БИН 000000000008, Республика Казахстан', groupId: 'G2', external: true },   // внешний собственник: металл перерабатываем и отдаём, не продаём (v1.7, кейс ПМ)
-  ];
-  /* Источники металла (происхождение, v1.6): у ПМ внутри собственника — своя руда и покупное сырьё; у АР источник один и равен собственнику */
-  DB.sources = [
-    { id: 'ИС-A5', assetId: 'A5', code: 'Р-001', name: 'Руда Каменской Пади — собственная', kind: 'own' },
-    { id: 'ИС-A5-3', assetId: 'A5', code: 'П-003', name: 'Руда Пещерного участка — покупка', kind: 'purchased', supplier: 'ООО «КПМ»' },
-    { id: 'ИС-A5-4', assetId: 'A5', code: 'ГК-010', name: 'Гравиконцентрат — покупка', kind: 'purchased', supplier: 'АО «Тайгинское»' },
-    { id: 'ИС-A5-2', assetId: 'A5', code: 'Х-008', name: 'Хвосты флотации — покупка', kind: 'purchased', supplier: 'ООО «Северный рудник»' },
-    { id: 'ИС-A6', assetId: 'A6', code: 'Р-001', name: 'Руда Зареченского — собственная', kind: 'own' },
-    { id: 'ИС-A6-2', assetId: 'A6', code: 'ГК-012', name: 'Гравиконцентрат — покупка', kind: 'purchased', supplier: 'АО «Тайгинское»' },
-    { id: 'ИС-A7', assetId: 'A7', code: 'Р-001', name: 'Руда Лунного — собственная', kind: 'own' },
-    { id: 'ИС-A7-2', assetId: 'A7', code: 'Т-004', name: 'Руда Тамарского участка — покупка', kind: 'purchased', supplier: 'ООО «Тамар-Золото»' },
+    /* внешний контур без группы: компании, у которых активы покупают сырьё (происхождение металла); своего металла в системе у них нет (v1.9) */
+    { id: 'S1', name: 'КПМ', legal: 'ООО «КПМ», ИНН 0000000011', groupId: null, external: true },
+    { id: 'S2', name: 'Тайгинское', legal: 'АО «Тайгинское», ИНН 0000000012', groupId: null, external: true },
+    { id: 'S3', name: 'Северный рудник', legal: 'ООО «Северный рудник», ИНН 0000000013', groupId: null, external: true },
+    { id: 'S4', name: 'Тамар-Золото', legal: 'ООО «Тамар-Золото», ИНН 0000000014', groupId: null, external: true },
   ];
   DB.processors = [
     { id: 'P1', name: 'Приуральский аффинажный завод', type: 'refinery', outputProductId: 'PT-REF' },
@@ -1975,7 +2015,7 @@ function buildDemo() {
       L(111543.8, 16.07, 82.84, { spec: 'СП-2026-038', split: [{ assetId: 'A3', shareAu: 82, shareAg: 76 }, { assetId: 'A4', shareAu: 18, shareAg: 24 }] })] },
     // v1.7.2, кейс 4 (ПМ): одна спецификация — один собственник с тремя происхождениями + второй собственник (по образцу спецификации АГМК→КЗЦМ: РА 015/019/002/009 + ЮВГК)
     { asset: 'A5', from: 'L-A5', proc: 'P2', sent: DT('2026-09-15'), arr: DT('2026-09-22'), acc: DT('2026-09-24'), carrier: 'C2', user: 'U4', lots: [
-      L(96400, 68.90, 27.10, { spec: 'СП-2026-144', split: [{ assetId: 'A5', sourceId: 'ИС-A5', shareAu: 46, shareAg: 44 }, { assetId: 'A5', sourceId: 'ИС-A5-2', shareAu: 21, shareAg: 23 }, { assetId: 'A5', sourceId: 'ИС-A5-3', shareAu: 18, shareAg: 17 }, { assetId: 'A7', sourceId: 'ИС-A7', shareAu: 15, shareAg: 16 }] })] },
+      L(96400, 68.90, 27.10, { spec: 'СП-2026-144', split: [{ assetId: 'A5', sourceId: 'A5', shareAu: 46, shareAg: 44 }, { assetId: 'A5', sourceId: 'S3', shareAu: 21, shareAg: 23 }, { assetId: 'A5', sourceId: 'S1', shareAu: 18, shareAg: 17 }, { assetId: 'A7', sourceId: 'A7', shareAu: 15, shareAg: 16 }] })] },
     { asset: 'A3', from: 'L-A3', proc: 'P2', sent: DT('2026-10-01'), arr: DT('2026-10-08'), acc: null, carrier: 'C2', user: 'U1', lots: [L(50000, 69.80, 26.00), L(42000, 55.00, 40.00)] },   // прибыла, приёмка задерживается (документы) — ждёт «Принята в переработку»
     // Полярный ГОК → Сибирский МК (цементат, ДП-4, промежуточный), затем СМК → Волжский АЗ (ДП-5) — сценарий И
     { asset: 'A4', from: 'L-A4', proc: 'P3', product: 'PT-CEM', sent: DT('2026-07-07'), arr: DT('2026-07-15'), user: 'U1', lots: [
@@ -1987,27 +2027,27 @@ function buildDemo() {
     // Каменская Падь → Волжский АЗ (ДП-6, правила A) — группа 2
     { asset: 'A5', from: 'L-A5', proc: 'P2', sent: DT('2026-07-28'), arr: DT('2026-08-04'), carrier: 'C2', user: 'U4', lots: [
       L(42000, 70.80, 25.40, { proc: P(70.70, 25.30), confirm: { source: 'proc', date: DT('2026-08-14'), user: 'U4' } }),
-      L(35000, 73.40, 22.80, { proc: P(73.30, 22.70), confirm: { source: 'proc', date: DT('2026-08-14'), user: 'U4' } })] },
+      L(35000, 73.40, 22.80, { src: 'A7', proc: P(73.30, 22.70), confirm: { source: 'proc', date: DT('2026-08-14'), user: 'U4' } })] },   // сырьё Лунного ГОКа (внутригрупповое)
     { asset: 'A5', from: 'L-A5', proc: 'P2', sent: DT('2026-09-29'), arr: DT('2026-10-06'), carrier: 'C2', user: 'U4', lots: [
       L(44000, 71.30, 25.00, { proc: P(71.22, 24.90), procDate: DT('2026-10-13') }),                                                          // можно подтвердить в демо
-      L(37000, 69.90, 26.50, { src: 'ИС-A5-2' })] },                                                                                            // покупное сырьё (происхождение, v1.6)
+      L(37000, 69.90, 26.50, { src: 'S3' })] },                                                                                            // покупное сырьё (происхождение, v1.6)
     // Зареченский → Приуральский АЗ (ДП-7)
     { asset: 'A6', from: 'L-A6', proc: 'P1', sent: DT('2026-08-11'), arr: DT('2026-08-18'), user: 'U4', lots: [
       L(40000, 72.10, 24.20, { proc: P(72.00, 24.10), confirm: { source: 'proc', date: DT('2026-08-28'), user: 'U4' } }),
-      L(33500, 70.40, 26.10, { src: 'ИС-A6-2', proc: P(70.33, 26.00), confirm: { source: 'proc', date: DT('2026-08-28'), user: 'U4' } })] },   // покупной гравиконцентрат
+      L(33500, 70.40, 26.10, { src: 'S2', proc: P(70.33, 26.00), confirm: { source: 'proc', date: DT('2026-08-28'), user: 'U4' } })] },   // покупной гравиконцентрат
     { asset: 'A6', from: 'L-A6', proc: 'P1', sent: DT('2026-09-15'), user: 'U4', lots: [L(31000, 71.00, 25.20)], cancel: { date: DT('2026-09-17'), reason: 'Переработчик отказал в приёмке: несоответствие сопроводительных документов. Партия возвращена на площадку.' } },
     // Лунный → Волжский АЗ (ДП-8, правила B)
     { asset: 'A7', from: 'L-A7', proc: 'P2', sent: DT('2026-09-01'), arr: DT('2026-09-08'), carrier: 'C2', user: 'U4', lots: [
       L(38000, 71.60, 24.80, { proc: P(71.50, 24.70), confirm: { source: 'proc', date: DT('2026-09-18'), user: 'U4' } }),
       L(30500, 69.20, 27.20, { proc: P(69.15, 27.10), confirm: { source: 'proc', date: DT('2026-09-18'), user: 'U4' } })] },
-    { asset: 'A7', from: 'L-A7', proc: 'P2', sent: DT('2026-10-12'), carrier: 'C2', user: 'U4', lots: [L(36000, 70.70, 25.60, { src: 'ИС-A7-2' })] },
+    { asset: 'A7', from: 'L-A7', proc: 'P2', sent: DT('2026-10-12'), carrier: 'C2', user: 'U4', lots: [L(36000, 70.70, 25.60, { src: 'S4' })] },
     // плановые отгрузки до конца года (v1.6): факт отправки = план до смены статуса; начисления по ним — прогноз
     { plan: true, asset: 'A1', from: 'L-A1', proc: 'P1', sent: DT('2026-10-28'), user: 'U1', lots: [L(46000, 71.40, 25.00), L(39000, 73.00, 23.20)] },
     { plan: true, asset: 'A1', from: 'L-A1', proc: 'P1', sent: DT('2026-11-18'), user: 'U1', lots: [L(45000, 71.60, 24.80)] },
     { plan: true, asset: 'A3', from: 'L-A3', proc: 'P2', sent: DT('2026-11-05'), carrier: 'C2', user: 'U1', lots: [L(48000, 70.20, 25.90), L(40000, 72.30, 23.80)] },
-    { plan: true, asset: 'A5', from: 'L-A5', proc: 'P2', sent: DT('2026-10-27'), carrier: 'C2', user: 'U4', lots: [L(43000, 71.00, 25.30), L(30000, 70.10, 26.20, { src: 'ИС-A5-2' })] },
+    { plan: true, asset: 'A5', from: 'L-A5', proc: 'P2', sent: DT('2026-10-27'), carrier: 'C2', user: 'U4', lots: [L(43000, 71.00, 25.30), L(30000, 70.10, 26.20, { src: 'S3' })] },
     { plan: true, asset: 'A5', from: 'L-A5', proc: 'P2', sent: DT('2026-11-24'), carrier: 'C2', user: 'U4', lots: [L(44000, 71.20, 25.10)] },
-    { plan: true, asset: 'A7', from: 'L-A7', proc: 'P2', sent: DT('2026-11-10'), carrier: 'C2', user: 'U4', lots: [L(37000, 70.60, 25.70, { src: 'ИС-A7-2' })] },
+    { plan: true, asset: 'A7', from: 'L-A7', proc: 'P2', sent: DT('2026-11-10'), carrier: 'C2', user: 'U4', lots: [L(37000, 70.60, 25.70, { src: 'S4' })] },
     { plan: true, asset: 'A7', from: 'L-A7', proc: 'P2', sent: DT('2026-12-08'), carrier: 'C2', user: 'U4', lots: [L(38000, 70.80, 25.50)] },
     // концентрат обычным ЖД-транспортом (Полиметалл: концентрат — не спецперевозка)
     { asset: 'A7', from: 'L-A7', proc: 'P2', product: 'PT-CONC', sent: DT('2026-09-30'), carrier: 'C3', method: 'ЖД', user: 'U4', lots: [L(2400000, 1.20, 4.50), L(2150000, 0.95, 3.80)] },
@@ -2026,9 +2066,9 @@ function buildDemo() {
   /* ---------- реализация ---------- */
   const D = {};
   function mkDeal(key, spec, contracts, after) {
-    const d = at(spec.created, () => asUser(spec.manager, () => createDeal({ clientId: spec.client, metal: spec.metal, saleForm: spec.form, pickupLocId: spec.pickup, exchangeQuote: spec.xq, discount: spec.disc, rate: spec.rate, carrierId: spec.carrier, logistics: spec.logistics, consigneeId: spec.consignee || spec.client, payTerms: spec.pay, managerId: spec.manager, comment: spec.comment || '' })));
+    const d = at(spec.created, () => asUser(spec.manager, () => createDeal({ clientId: spec.client, metal: spec.metal, saleForm: spec.form, pickupLocId: spec.pickup, exchangeQuote: spec.xq, discount: spec.disc, rate: spec.rate, carrierId: spec.carrier, logistics: spec.logistics, consigneeId: spec.consignee || spec.client, payTerms: spec.pay, managerId: spec.manager, comment: spec.comment || '', priceBasis: spec.basis || 'chem' })));
     D[key] = d;
-    const cs = contracts.map(c => at(c.date, () => asUser(spec.manager, () => createSalesContract(d, { assetId: c.asset, date: c.date, mass: c.mass, ligMass: c.lig, fineness: c.fin, pickupLocId: c.pickup || d.pickupLocId }).c)));
+    const cs = contracts.map(c => at(c.date, () => asUser(spec.manager, () => createSalesContract(d, { assetId: c.asset, date: c.date, mass: c.mass, ligMass: c.lig, fineness: c.fin, pickupLocId: c.pickup || d.pickupLocId, origins: c.origins }).c)));
     if (spec.concluded) at(spec.concluded, () => concludeDeal(d, spec.concluded));
     if (after) after(d, cs);
     refreshDealStatus(d);
@@ -2083,7 +2123,7 @@ function buildDemo() {
     [{ asset: 'A6', date: DT('2026-09-18'), mass: 25000, lig: 25005, fin: 99.98 }, { asset: 'A6', date: DT('2026-09-18'), mass: 10000, lig: 10002, fin: 99.98 }],
     (d, [c1, c2]) => { pay(c1, { usd: contractCostUSD(c1), date: DT('2026-10-18') }, 'полная оплата'); at(DT('2026-09-24'), () => asUser('U4', () => cancelSalesContract(c2, 'Покупатель сократил объём; металл остаётся на счёте завода'))); });
   // СД-8 (сентябрь) — серебро, частично оплачено, передано покупателю
-  mkDeal('d9', { created: DT('2026-09-19'), manager: 'U1', client: 'CL7', metal: 'Ag', form: 'с НДС', pickup: 'L-P2', xq: 39.20, disc: -0.50, rate: 88.40, carrier: 'C2', logistics: 'buyer', pay: 'частичная предоплата', concluded: DT('2026-09-20') },
+  mkDeal('d9', { created: DT('2026-09-19'), manager: 'U1', client: 'CL7', metal: 'Ag', basis: 'lig', form: 'с НДС', pickup: 'L-P2', xq: 39.20, disc: -0.50, rate: 88.40, carrier: 'C2', logistics: 'buyer', pay: 'частичная предоплата', concluded: DT('2026-09-20') },
     [{ asset: 'A3', date: DT('2026-09-20'), mass: 250000, lig: 250175, fin: 99.93 }],
     (d, [c]) => { const cost = contractCostUSD(c); const p1 = pay(c, { usd: cost * 0.6, date: DT('2026-09-22') }, 'аванс'); pay(c, { usd: cost * 0.4, date: DT('2026-10-25') }, 'окончательный платёж'); recv(p1, DT('2026-09-22'), 88.10); at(DT('2026-10-05'), () => transferContract(c, DT('2026-10-05'))); });
   // СД-9 (октябрь) — продано, не передано; экспорт серебра; наша логистика
@@ -2097,7 +2137,11 @@ function buildDemo() {
     [{ asset: 'A5', date: DT('2026-10-07'), mass: 20000, lig: 20004, fin: 99.98 }, { asset: 'A7', date: DT('2026-10-07'), mass: 18000, lig: 18003.6, fin: 99.98 }],
     (d, [c1, c2]) => { [c1, c2].forEach(c => { const cost = contractCostUSD(c); pay(c, { usd: cost * 0.2, date: DT('2026-10-09') }, 'аванс'); pay(c, { usd: cost * 0.8, date: DT('2026-11-05') }, 'окончательный платёж'); }); recv(contractPayments(c1.id)[0], DT('2026-10-09'), 89.05); });
   // СД-11 (октябрь) — предварительная, без контрактов: место для демонстрации «Добавить контракт»
-  mkDeal('d5', { created: DT('2026-10-12'), manager: 'U1', client: 'CL4', metal: 'Ag', form: 'с НДС', pickup: 'L-P2', xq: 38.90, disc: -1.00, rate: 88.60, carrier: 'C2', logistics: 'buyer', pay: 'постоплата', comment: 'Условия согласованы 12.10, ждём подтверждения массы от завода' }, []);
+  mkDeal('d5', { created: DT('2026-10-12'), manager: 'U1', client: 'CL4', metal: 'Ag', basis: 'lig', form: 'с НДС', pickup: 'L-P2', xq: 38.90, disc: -1.00, rate: 88.60, carrier: 'C2', logistics: 'buyer', pay: 'постоплата', comment: 'Условия согласованы 12.10, ждём подтверждения массы от завода' }, []);
+  // СД-12 (октябрь) — продажа покупного металла со счёта «с НДС»: сырьё Лунного ГОКа и Северного рудника; покупатель — юрлицо, сделка с НДС (v1.9)
+  mkDeal('d12', { created: DT('2026-10-08'), manager: 'U4', client: 'CL3', metal: 'Au', form: 'с НДС', pickup: 'L-P2', xq: 3445.00, disc: 0.50, rate: 89.00, carrier: 'C2', logistics: 'buyer', pay: 'постоплата', concluded: DT('2026-10-09') },
+    [{ asset: 'A5', date: DT('2026-10-09'), mass: 20000, lig: 20004, fin: 99.98, origins: [{ sourceId: 'A7', mass: 12000 }, { sourceId: 'S3', mass: 8000 }] }],
+    (d, [c1]) => { pay(c1, { usd: contractCostUSD(c1), date: DT('2026-11-06') }, 'оплата по контракту'); });
 
   /* ---------- После MVP: заявки на лицензии, план, товарные позиции ---------- */
   DB.licenseApps = [
@@ -2183,7 +2227,7 @@ const isElma = () => UI.theme === 'elma';
 /* ---------- хранение ---------- */
 function persist() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ db: DB, seq: SEQ, saved: new Date().toISOString() })); } catch (e) { } try { if (typeof schedulePush === 'function') schedulePush(); } catch (e) { } }
 function restore() {
-  try { const raw = localStorage.getItem(STORAGE_KEY); if (!raw) return false; const o = JSON.parse(raw); if (!o.db || !o.db.shipments) return false; DB = o.db; SEQ = o.seq || {}; UI.savedAt = o.saved; DB.tasks = DB.tasks || []; DB.comments = DB.comments || []; DB.reconciliations = DB.reconciliations || []; DB.sources = DB.sources || []; if (!DB.users.find(u => u.id === DB.currentUserId)) DB.currentUserId = DB.users[0].id; return true; } catch (e) { return false; }
+  try { const raw = localStorage.getItem(STORAGE_KEY); if (!raw) return false; const o = JSON.parse(raw); if (!o.db || !o.db.shipments || o.db.schemaV !== 19) return false;   /* v1.9: модель счетов и происхождения изменилась — старые сохранённые данные не переносятся, демонабор собирается заново */ DB = o.db; SEQ = o.seq || {}; UI.savedAt = o.saved; DB.tasks = DB.tasks || []; DB.comments = DB.comments || []; DB.reconciliations = DB.reconciliations || []; DB.sources = DB.sources || []; DB.sources.forEach(x => { if (x.supplier != null) { if (!x.minerName && !x.minerAssetId) x.minerName = x.supplier; delete x.supplier; } }); /* v1.8: «У кого куплено» → добытчик */ if (!DB.users.find(u => u.id === DB.currentUserId)) DB.currentUserId = DB.users[0].id; return true; } catch (e) { return false; }
 }
 function resetDemo(mode) { try { localStorage.removeItem(STORAGE_KEY); } catch (e) { } if (mode === 'clean') buildClean(); else buildDemo(); UI.savedAt = null; persist(); toast(mode === 'clean' ? 'Чистая система: справочники, договоры переработки и лимиты заведены, документов нет. Начните с отгрузки.' : 'Данные восстановлены в исходное состояние', 'ok', 7000); if (REMOTE_ENABLED && REMOTE.url && REMOTE.auto) remotePush({ all: true }); go('#/overview'); }
 
@@ -2387,7 +2431,7 @@ const vis = {
   licenses: () => DB.licenseApps.filter(a => canSee(asset(a.assetId).groupId)),
   plan: () => DB.planRows.filter(p => canSee(p.groupId)),
 };
-const optAssets = () => DB.assets.map(a => ({ value: a.id, label: a.name }));
+const optAssets = () => ownerAssets().map(a => ({ value: a.id, label: a.name }));
 const optProcs = () => DB.processors.map(p => ({ value: p.id, label: p.name }));
 const optMetals = () => METALS.map(m => ({ value: m, label: m }));
 const optClients = () => DB.clients.map(c => ({ value: c.id, label: c.name }));
@@ -2561,7 +2605,9 @@ function accrualCols(opts = {}) {
     { key: 'acc', label: 'Целевой счёт', render: r => refLink('account', r.accountId, accountName(account(r.accountId))), sortVal: r => r.accountId },
   ];
 }
-const originCell = (assetId, sourceId) => { const src = source(sourceId); if (!src) return '<span class="muted">—</span>'; return `<span class="${src.kind === 'own' ? 'muted' : ''}" title="${esc(src.name)}">${esc(src.code || src.id)}</span>${src.kind === 'purchased' ? ' <span class="badge violet small">покупн.</span>' : ''}`; };
+const originCell = (assetId, sourceId) => { const mn = sourceMiner(sourceId || assetId, assetId); if (!mn) return '<span class="muted">—</span>'; return mn.type === 'own' ? '<span class="muted">собственный</span>' : `${esc(mn.name)} <span class="badge ${mn.type === 'internal' ? 'blue' : 'violet'} small" title="покупной металл: ${MINER_TYPE[mn.type]}">с НДС</span>`; };
+const minerCell = (sourceId, ownerId) => originCell(ownerId, sourceId);
+const vatBadge = v => `<span class="badge ${v ? 'violet' : 'green'} small">${VAT_NAME(v)}</span>`;
 function forecastCols(opts = {}) {
   return [
     ...(opts.withLot ? [{ key: 'lot', label: 'Партия', render: r => refLink('lot', r.lotId), sortVal: r => r.lotId, cls: 'nowrap' }] : []),
@@ -2634,7 +2680,7 @@ function viewShipment(id) {
 /* ---------- формы отгрузки ---------- */
 function formNewShipment() {
   const u = user(DB.currentUserId);
-  const assets = DB.assets.filter(a => canSee(a.groupId));
+  const assets = ownerAssets().filter(a => canSee(a.groupId));
   openForm({
     title: 'Создать отгрузку МПФ', tag: stage('mvp1'), wide: true,
     fields: [
@@ -2660,13 +2706,13 @@ function formNewShipment() {
     submitLabel: 'Создать (Планируется)',
   });
 }
-function syncSourceOptions(form, assetId, name = 'sourceId') {
+function syncSourceOptions(form, assetId, name = 'sourceId', noOwn = false) {
   const sel = form.querySelector('#f_' + name); if (!sel) return;
   if (!assetId) { if (sel.dataset.forAsset !== '') { sel.innerHTML = '<option value="">—</option>'; sel.dataset.forAsset = ''; } return; }
   if (sel.dataset.forAsset === assetId) return;
-  const cur = sel.value; const opts = assetSources(assetId);
-  sel.innerHTML = opts.map(x => `<option value="${esc(x.id)}">${esc(x.code)} · ${esc(x.name)}</option>`).join('');
-  sel.value = opts.some(x => x.id === cur) ? cur : ownSource(assetId).id; sel.dataset.forAsset = assetId;
+  const cur = sel.value; const opts = assetSources(assetId).filter(x => !noOwn || x.id !== assetId);
+  sel.innerHTML = opts.map(x => `<option value="${esc(x.id)}">${esc(x.id === assetId ? 'собственный' : x.name + (asset(x.id).external ? ' (внешний контур)' : ''))}</option>`).join('');
+  sel.value = opts.some(x => x.id === cur) ? cur : noOwn ? (opts[0] ? opts[0].id : '') : assetId; sel.dataset.forAsset = assetId;
 }
 /* Форма «Добавить спецификацию»: документ ГОКа + строки «собственник · происхождение · доля/граммы по Au и Ag».
    Строки динамические (+ / ×). Доля и граммы связаны: правишь долю — пересчитываются граммы от итога, правишь граммы — пересчитывается доля.
@@ -2676,7 +2722,7 @@ function formAddSpec(sh) {
      Итог: лигатура, Au г, Ag г — ввод; содержание % = г / лигатура (2 знака), можно поправить — тогда граммы пересчитаются.
      Строки: Au г, Ag г и лигатура собственника — ввод руками (первая строка предзаполнена итогом, пока её не трогали; добавленные — пустые); доли % — расчёт.
      Контроль: суммы граммов и лигатуры по строкам = итог спецификации. */
-  const assets = DB.assets.filter(a => canSee(a.groupId));
+  const assets = ownerAssets().filter(a => canSee(a.groupId));
   const n = specsOf(sh.id).length + 1; const d = defaultLotAsset(sh);
   const optA = assets.map(a => `<option value="${a.id}">${esc(a.name + (a.external ? ' — внешний' : ''))}</option>`).join('');
   let seq = 0;
@@ -2750,7 +2796,7 @@ function formAddSpec(sh) {
         const hAu = cond ? r1(au * cond.Au_extr / 100) : null, hAg = cond ? r1(ag * cond.Ag_extr / 100) : null; hcAu += hAu || 0; hcAg += hAg || 0;
         const pct = g => l ? r2(g / l * 100) + ' %' : '—';
         const contractCell = c ? `${esc(c.no)}<div class="muted small">${cond ? esc(cond.name.replace(/ \(.*\)$/, '')) : '<span class="warn">условие не найдено</span>'}</div>` : `<span class="neg" title="Приёмка будет заблокирована (А5)">нет договора</span>`;
-        return `<tr><td><b>${esc(assetName(o.assetId))}</b>${multiSrc && src ? `<div class="muted small">${esc(src.code)} · ${esc(src.name)}</div>` : ''}</td><td class="num">${fmtKg(l)}</td><td class="num">${pct(au)}</td><td class="num">${pct(ag)}</td><td class="num"><b>${hAu != null ? fmtKg(hAu) : '—'}</b></td><td class="num"><b>${hAg != null ? fmtKg(hAg) : '—'}</b></td><td>${contractCell}</td></tr>`;
+        return `<tr><td><b>${esc(assetName(o.assetId))}</b>${src && src.id !== o.assetId ? `<div class="muted small">от: ${esc(src.name)} · с НДС</div>` : ''}</td><td class="num">${fmtKg(l)}</td><td class="num">${pct(au)}</td><td class="num">${pct(ag)}</td><td class="num"><b>${hAu != null ? fmtKg(hAu) : '—'}</b></td><td class="num"><b>${hAg != null ? fmtKg(hAg) : '—'}</b></td><td>${contractCell}</td></tr>`;
       }).join('');
       const warn = [dup ? `Спецификация ${esc(dup.specNo)} в этой отгрузке уже есть (партий: ${dup.lots.length}) — проверьте номер.` : '', dupRow ? 'Две строки с одним собственником и происхождением — объедините их.' : ''].filter(Boolean);
       const ind = (lbl, ok, sm, t) => `<span class="${ok ? 'pos' : 'neg'}" title="${ok ? 'сумма по строкам равна итогу' : `по строкам ${fmtNum(sm, 1)} г, итог ${fmtNum(t, 1)} г`}">${lbl} ${t ? r2(sm / t * 100) : 0} %</span>`;
@@ -2873,7 +2919,7 @@ function viewLot(id) {
   const shipBlock = `<div class="panel"><div class="pt"><h2>Отгрузка</h2>${stage('mvp2', 'встроенный блок')}<span class="muted small">поля родителя без дублирования</span></div>${fields([
     { l: 'Отгрузка', v: refLink('shipment', sh.id) }, { l: 'Собственник партии', v: esc(assetName(l.assetId)) + (asset(l.assetId).external ? ' <span class="badge amber small">внешний собственник</span>' : '') }, { l: 'Спецификация', v: `<b>${esc(l.specNo || '—')}</b>${(l.shareAu != null && l.shareAu !== 100) || (l.shareAg != null && l.shareAg !== 100) ? ` <span class="muted">· доля собственника Au ${r2(l.shareAu)} % · Ag ${r2(l.shareAg)} %</span>` : ''}${specsOf(sh.id).some(sp => sp.specNo === l.specNo && sp.lots.length > 1) ? ` <span class="muted small">(общая на ${specsOf(sh.id).find(sp => sp.specNo === l.specNo).lots.length} партии)</span>` : ''}` }, { l: 'Договор переработки', v: l.procContractId ? refLink('procContract', l.procContractId, procContract(l.procContractId).no) : '<span class="muted">фиксируется при приёмке</span>' }, { l: 'Переработчик', v: esc(procName(sh.procId)) }, { l: 'Откуда', v: esc(locName(sh.fromLocId)) },
     { l: 'Тип продукции / выходной продукт', v: `${esc(productType(sh.productId).name)} → ${esc(productType(l.outputProductId).name)}` }, { l: 'Отправка / прибытие', v: `${fmtD(sh.sentFact)} / ${fmtD(sh.arrFact)}` },
-    { l: 'Происхождение металла', v: `${originCell(l.assetId, l.sourceId)} ${esc(originName(l.sourceId))}` },
+    { l: 'Происхождение металла', v: `${originCell(l.assetId, l.sourceId)} <span class="muted small">→ счёт «${VAT_NAME(isVat(l.assetId, l.sourceId))}»</span>` },
   ], 'c3')}</div>`;
   let body = '';
   if (t.cur === 'main') body = shipBlock + `<div class="panel"><div class="pt"><h2>Договор, условия и выход</h2></div>${fields([
@@ -3090,7 +3136,7 @@ function chainPanel(sh) {
   const interLoc = st.code === 'stage1' ? locOfProcessor(sh.procId) : locById(sh.fromLocId);
   const interProc = processor(interLoc.ownerProc);
   const shAssets = shipAssetsAll(sh);
-  const accs = shAssets.flatMap(a => METALS.map(m => findAccountByLoc(a, interLoc.id, m))).filter(Boolean);
+  const accs = shAssets.flatMap(a => METALS.flatMap(m => [findAccountByLoc(a, interLoc.id, m, false), findAccountByLoc(a, interLoc.id, m, true)])).filter(Boolean);
   const steps = st.code === 'stage1'
     ? [`<b>${esc(shipAssetNames(sh))}</b> → ${esc(productType(sh.productId).name)}`, `<b>${esc(interProc.name)}</b> (промежуточный): начисления на аффинажный счёт при этом переработчике`, `→ ${esc(productType(interProc.outputProductId).name)} отдельной отгрузкой на аффинажный завод (списание со счёта по партиям, А4)`]
     : [`${esc(shipAssetNames(sh))} → <b>${esc(interProc.name)}</b> (промежуточный): входящие отгрузки ниже`, `<b>эта отгрузка</b>: ${esc(productType(sh.productId).name)} списан со счёта при ${esc(interProc.name)} по партиям (А4)`, `→ <b>${esc(procName(sh.procId))}</b> (аффинаж): начисления на счёт при заводе`];
@@ -3161,13 +3207,39 @@ function viewDeals() {
     kanban: { statuses: ['Предварительная', 'Заключена', 'Исполняется', 'Завершена', 'Отменена'], status: r => r.status, card: r => { const a = dealAgg(r); return `<div class="kt"><span>${esc(r.id)} ${metalTag(r.metal)}</span><span class="muted">${fmtD(r.concludedDate)}</span></div><div class="km">${esc(client(r.clientId).name)}<br>${fmtKg(a.mass)} · ${fmtUsd(a.costUSD)}<br>${r.status !== 'Предварительная' && r.status !== 'Отменена' ? `отгрузка: ${a.shipFlag} · оплата: ${a.payFlag}` : ''}</div>`; } },
   });
 }
+function originRowCols(opts = {}) {
+  return [
+    ...(opts.withContract ? [{ key: 'c', label: 'Контракт', render: r => refLink('contract', r.contract.id), sortVal: r => r.contract.id, cls: 'nowrap' }, { key: 'date', label: 'Дата', val: r => fmtD(r.contract.date), sortVal: r => r.contract.date, cls: 'nowrap' }, { key: 'deal', label: 'Сделка / клиент', render: r => `${refLink('deal', r.contract.dealId)}<div class="muted small">${esc(client(deal(r.contract.dealId).clientId).name)}</div>`, sortVal: r => r.contract.dealId }, { key: 'asset', label: 'Продавец', val: r => assetName(r.contract.assetId), cls: 'nowrap' }, { key: 'metal', label: 'Металл', render: r => metalTag(dealMetal(r.contract)), sortVal: r => dealMetal(r.contract) }] : []),
+    { key: 'src', label: 'Происхождение', render: r => originCell(r.contract.assetId, r.sourceId), sortVal: r => r.minerName, cls: 'nowrap' },
+    { key: 'mass', label: 'Масса ХЧ', num: true, sortVal: r => r.mass, render: r => fmtKg(r.mass), total: sumCol(r => r.mass) },
+    { key: 'share', label: 'Доля', num: true, sortVal: r => r.share, render: r => fmtNum(r.share, 2) + ' %' },
+    { key: 'usd', label: 'Стоимость, USD', num: true, sortVal: r => r.usd, render: r => fmtUsd(r.usd), total: rows => fmtUsd(sum(rows, r => r.usd)) },
+    { key: 'cur', label: 'В валюте сделки (ориент.)', num: true, sortVal: r => r.cur, render: r => fmtRub(r.cur), total: rows => fmtRub(sum(rows, r => r.cur)) },
+  ];
+}
+/* Отчёт «Продажи по происхождению»: каждая строка — линия происхождения контракта; свод по добытчику = что идёт в его бюджет */
+function viewSalesOrigin() {
+  const rows = vis.contracts().filter(c => c.status !== 'Отменена').flatMap(contractOriginRows);
+  const by = {}; rows.forEach(r => { const m = dealMetal(r.contract); const k = (r.minerAssetId || r.minerName) + '|' + m; const g = by[k] || (by[k] = { id: r.minerAssetId, name: r.minerName, type: r.minerType, metal: m, mass: 0, usd: 0, cur: 0, own: 0, n: 0 }); g.mass = r1(g.mass + r.mass); g.usd = r2(g.usd + r.usd); g.cur = r2(g.cur + r.cur); if (r.minerType !== 'own') g.own = r1(g.own + r.mass); g.n++; });
+  const svod = table({ id: 'so_sv', compact: true, rows: Object.values(by).sort((a, b) => a.name.localeCompare(b.name) || a.metal.localeCompare(b.metal)), totals: false, cols: [
+    { key: 'name', label: 'Происхождение (компания)', render: r => `<b>${esc(r.name)}</b>${asset(r.id) && asset(r.id).external ? ' <span class="badge violet small">внешний контур</span>' : ''}`, sortVal: r => r.name }, { key: 'metal', label: 'Металл', render: r => metalTag(r.metal), sortVal: r => r.metal },
+    { key: 'mass', label: 'Продано, масса ХЧ', num: true, sortVal: r => r.mass, render: r => fmtKg(r.mass) }, { key: 'via', label: 'в т. ч. продано другим активом', num: true, sortVal: r => r.own, render: r => r.own ? fmtKg(r.own) : '<span class="muted">—</span>' },
+    { key: 'usd', label: 'Стоимость, USD', num: true, sortVal: r => r.usd, render: r => fmtUsd(r.usd) }, { key: 'cur', label: 'В валюте сделки (ориент.)', num: true, sortVal: r => r.cur, render: r => fmtRub(r.cur) }, { key: 'n', label: 'Строк', num: true, val: r => r.n }] });
+  return listPage({
+    id: 'salesorig', title: 'Продажи по происхождению', titleExtra: stage('proto'), subtitle: 'Контракты продажи, разложенные по происхождению металла: масса и деньги. Юридически продаёт собственник, а в бюджет продажа идёт компании-происхождению.',
+    note: `<div class="panel"><div class="pt"><h2>Свод по происхождению</h2><span class="muted small">продажи относятся в бюджет компании, от которой сырьё; по неотменённым контрактам</span></div>${svod}</div>`,
+    rows, search: r => [r.contract.id, r.contract.dealId, assetName(r.contract.assetId), r.minerName, ].join(' '),
+    filters: [{ key: 'asset', label: 'Продавец', options: optAssets(), get: r => r.contract.assetId }, { key: 'mtype', label: 'Происхождение', options: Object.entries(MINER_TYPE).map(([value, label]) => ({ value, label })), get: r => r.minerType }, { key: 'metal', label: 'Металл', options: optMetals(), get: r => dealMetal(r.contract) }],
+    cols: originRowCols({ withContract: true }), rowHref: r => H.contract(r.contract.id), totals: true, defaultSort: { key: 'date', dir: 'desc' },
+  });
+}
 function contractCols(opts = {}) {
   return [
     { key: 'id', label: 'Номер', render: r => `<b>${esc(r.id)}</b>`, cls: 'nowrap' },
     { key: 'status', label: 'Статус', render: r => badge(r.status), sortVal: r => r.status },
     ...(opts.withDeal ? [{ key: 'deal', label: 'Сделка / клиент', render: r => `${refLink('deal', r.dealId)}<div class="muted small">${esc(client(deal(r.dealId).clientId).name)}</div>`, sortVal: r => r.dealId }] : []),
     { key: 'asset', label: 'Продавец (собственник)', val: r => assetName(r.assetId), cls: 'nowrap' }, { key: 'metal', label: 'Металл', render: r => metalTag(dealMetal(r)), sortVal: r => dealMetal(r) }, { key: 'date', label: 'Дата контракта', val: r => fmtD(r.date), sortVal: r => r.date, cls: 'nowrap' },
-    { key: 'mass', label: 'Масса (хим. чистая)', num: true, sortVal: r => r.mass, render: r => fmtKg(r.mass), total: sumCol(r => r.mass) }, { key: 'lig', label: 'Лигатурная', num: true, sortVal: r => r.ligMass, render: r => fmtKg(r.ligMass) }, { key: 'fin', label: 'Проба', num: true, val: r => fmtPct(r.fineness) },
+    { key: 'orig', label: 'Происхождение', render: r => contractOrigins(r).map(o => originCell(r.assetId, o.sourceId)).join(', '), sortable: false }, { key: 'mass', label: 'Масса (хим. чистая)', num: true, sortVal: r => r.mass, render: r => fmtKg(r.mass), total: sumCol(r => r.mass) }, { key: 'lig', label: 'Лигатурная', num: true, sortVal: r => r.ligMass, render: r => fmtKg(r.ligMass) }, { key: 'fin', label: 'Проба', num: true, val: r => fmtPct(r.fineness) },
     { key: 'cost', label: 'Стоимость, USD', num: true, sortVal: r => contractCostUSD(r), render: r => fmtUsd(contractCostUSD(r)), total: rows => fmtUsd(sum(rows.filter(r => r.status !== 'Отменена'), contractCostUSD)) },
     { key: 'costCur', label: 'В валюте сделки (ориент.)', num: true, sortVal: r => contractCostCur(r), render: r => fmtRub(contractCostCur(r)) },
     { key: 'paid', label: 'Оплачено, USD', num: true, sortVal: r => contractPaidUSD(r), render: r => fmtUsd(contractPaidUSD(r)), total: rows => fmtUsd(sum(rows.filter(r => r.status !== 'Отменена'), contractPaidUSD)) },
@@ -3205,7 +3277,7 @@ function viewDeal(id) {
   if (t.cur === 'main') body = `<div class="panel"><div class="pt"><h2>Общие параметры</h2><span class="muted small">жёстко общие — задаются в сделке; «по умолчанию общие» копируются в контракт и могут отличаться</span></div>${fields([
     { l: 'Клиент', v: `${esc(client(d.clientId).name)} <span class="muted">(${esc(client(d.clientId).type)})</span>` }, { l: 'Металл', v: metalTag(d.metal) }, { l: 'Форма продажи', v: esc(d.saleForm) },
     { l: 'Биржевая котировка, $/тр. унц.', v: fmtNum(d.exchangeQuote, 2) }, { l: 'Дисконт/премия', v: `${d.discount > 0 ? '+' : ''}${fmtNum(d.discount, 2)} %` }, { l: 'Котировка сделки, $/тр. унц.', v: `<b>${fmtNum(d.quote, 2)}</b> <span class="muted small">биржевая × (1 + дисконт/премия)</span>` },
-    { l: 'Валюта сделки', v: 'рубль' }, { l: 'Курс ориентировочный, ₽ за 1 USD', v: `${fmtNum(d.rate, 4)} <span class="muted small">фактический — в каждой оплате</span>` }, { l: 'Место забора (по умолчанию)', v: esc(locName(d.pickupLocId)) },
+    { l: 'База цены', v: `<b>${PRICE_BASIS[d.priceBasis === 'lig' ? 'lig' : 'chem']}</b>` }, { l: 'Валюта сделки', v: 'рубль' }, { l: 'Курс ориентировочный, ₽ за 1 USD', v: `${fmtNum(d.rate, 4)} <span class="muted small">фактический — в каждой оплате</span>` }, { l: 'Место забора (по умолчанию)', v: esc(locName(d.pickupLocId)) },
     { l: 'Спецперевозчик', v: esc(carrier(d.carrierId).name) }, { l: 'Чья логистика', v: esc(LOGISTICS[d.logistics]) }, { l: 'Грузополучатель', v: esc(client(d.consigneeId).name) },
     { l: 'Условия оплаты', v: esc(d.payTerms) }, { l: 'Ответственный менеджер', v: esc(user(d.managerId).name) }, { l: 'Группы собственников (для доступа)', v: dealGroups(d).map(g => esc(group(g).name)).join(', ') },
     { l: 'Дата заключения', v: fmtD(d.concludedDate) }, { l: 'Дата завершения', v: fmtD(d.completedDate) }, { l: 'Статус', v: badge(d.status) },
@@ -3263,16 +3335,17 @@ function viewContract(id) {
   <div class="panel"><div class="pt"><h2>Контракт</h2></div>${fields([
     { l: 'Продавец (собственник)', v: esc(assetName(c.assetId)) }, { l: 'Группа собственников', v: esc(group(c.groupId).name) }, { l: 'Дата контракта', v: `<b>${fmtD(c.date)}</b> <span class="muted small">дата списания металла</span>` },
     { l: 'Масса итоговая (хим. чистая)', v: `<b>${fmtKg(c.mass)}</b>`, big: false }, { l: 'Лигатурная масса', v: fmtKg(c.ligMass) }, { l: 'Проба', v: fmtPct(c.fineness) + ' <span class="muted small">хим. чистая = лигатурная × проба</span>' },
-    { l: 'Котировка сделки (копия)', v: `${fmtNum(c.quote, 2)} $/тр. унц. <span class="muted small">биржевая ${fmtNum(c.exchangeQuote, 2)}, ${c.discount > 0 ? '+' : ''}${fmtNum(c.discount, 2)} %</span>` }, { l: 'Стоимость, USD', v: `<b>${fmtUsd(contractCostUSD(c))}</b> <span class="muted small">котировка × масса ÷ 31,1034768</span>` }, { l: 'Стоимость в валюте сделки (ориент.)', v: `${fmtRub(contractCostCur(c))} <span class="muted small">по курсу ${fmtNum(c.rate, 4)}</span>` },
+    { l: 'Котировка сделки (копия)', v: `${fmtNum(c.quote, 2)} $/тр. унц. <span class="muted small">биржевая ${fmtNum(c.exchangeQuote, 2)}, ${c.discount > 0 ? '+' : ''}${fmtNum(c.discount, 2)} %</span>` }, { l: 'Стоимость, USD', v: `<b>${fmtUsd(contractCostUSD(c))}</b> <span class="muted small">котировка × ${priceBasis(c) === 'lig' ? 'лигатурная масса' : 'масса ХЧ'} ÷ 31,1034768</span>` }, { l: 'Стоимость в валюте сделки (ориент.)', v: `${fmtRub(contractCostCur(c))} <span class="muted small">по курсу ${fmtNum(c.rate, 4)}</span>` },
     { l: 'Место забора', v: esc(locName(c.pickupLocId)) }, { l: 'Счёт-источник', v: c.accountId ? refLink('account', c.accountId, accountName(account(c.accountId))) : '—' }, { l: 'Спецперевозчик / логистика', v: `${esc(carrier(c.carrierId).name)} · ${esc(LOGISTICS[c.logistics])}` },
     { l: 'Грузополучатель', v: esc(client(c.consigneeId).name) }, { l: 'Условия оплаты', v: esc(c.payTerms) }, { l: 'Статус', v: badge(c.status) },
-    { l: 'Лимит (расход)', v: lim ? `${refLink('limit', lim.id, lim.name)} <span class="muted small">остаток ${fmtKg(limitRemaining(lim))}</span>` : (locById(c.pickupLocId).type === 'processor' ? '<span class="warn">не найден — операция в сверке</span>' : '<span class="muted">не расходуется: забор не с аффинажного завода</span>') },
+    { l: 'Лимит (расход по лигатуре)', v: lim ? `${refLink('limit', lim.id, lim.name)} <span class="muted small">расход ${fmtKg(contractLig(c))} · остаток ${fmtKg(limitRemaining(lim))}</span>` : (locById(c.pickupLocId).type === 'processor' ? '<span class="warn">не найден — операция в сверке</span>' : '<span class="muted">не расходуется: забор не с аффинажного завода</span>') },
     { l: 'Договор переработки (объём)', v: pc ? refLink('procContract', pc.id, pc.no) : '<span class="muted">—</span>' }, { l: 'Признак «Отгрузка»', v: active ? badge(contractShipFlag(c)) : '—' },
     { l: 'Дата передачи спецперевозчику', v: fmtD(c.transferDate) }, { l: 'Дата получения покупателем', v: fmtD(c.receivedDate) }, { l: 'Признак «Оплата»', v: active ? badge(contractPayFlag(c)) : '—' },
     { l: 'Отчёт о переходе собственности в ГИИС ДМДК', v: c.transferDate ? (c.giisReported ? `<span class="chk">✓ ${fmtD(c.giisReported)}</span>` : `<span class="${addDays(c.transferDate, 5) < DB.today ? 'neg' : 'warn'}">не подан · срок ${fmtD(addDays(c.transferDate, 5))} (5 к.д. после передачи)</span>`) + ' ' + stage('proto') : null },
     { l: 'Сумма поступивших оплат, ₽', v: fmtRub(contractPaidRub(c)) }, { l: 'Оплачено, USD', v: fmtUsd(contractPaidUSD(c)) }, { l: 'Остаток к оплате, USD', v: active ? `<b>${fmtUsd(contractRemainingUSD(c))}</b>${contractPayFlag(c) === 'полностью' && contractPaidUSD(c) > 0 ? ' <span class="muted small">≤ допуска ' + fmtUsd(DB.params.payTolerance) + ' — оплата полностью</span>' : ''}` : '—' },
     c.cancelReason ? { l: 'Причина отмены', v: esc(c.cancelReason), span: 3 } : null,
   ])}</div>
+  <div class="panel"><div class="pt"><h2>Происхождение металла</h2><span class="muted small">масса и деньги контракта по линиям происхождения; продажа относится в бюджет добытчика сырья</span></div>${table({ id: 'co', compact: true, rows: contractOriginRows(c), totals: contractOrigins(c).length > 1, cols: originRowCols() })}</div>
   ${c.transferDate && !c.receivedDate ? `<div class="note info">Металл передан спецперевозчику ${fmtD(c.transferDate)}, при нашей логистике право собственности переходит после приёмки покупателем — получение отмечается отдельно (А35). На учёт металла передача не влияет: списание сделано при создании контракта.</div>` : ''}`;
   if (t.cur === 'pays') body = `<div class="panel"><div class="pt"><h2>Оплаты по контракту</h2><span class="muted small">покрыто, USD = фактическая сумма ₽ ÷ курс на дату оплаты</span></div>${table({ id: 'cp', cols: paymentCols(), rows: pays, rowHref: r => H.payment(r.id), totals: true, defaultOrder: PAYMENT_ORDER })}</div>`;
   if (t.cur === 'tx') body = `<div class="panel"><div class="pt"><h2>Транзакции по счетам</h2><span class="muted small">у неотменённого контракта — одно списание датой контракта (А12); при передаче повторного списания нет</span></div>${txTable(txs)}</div>`;
@@ -3311,7 +3384,7 @@ function formNewDeal() {
     note: `<div class="note info">Сделка вносится, когда условия и масса уже согласованы с клиентом; переговоры и подбор слитков в системе не ведутся. Статус — «Предварительная», затем добавляются контракты по каждому собственнику-продавцу.</div>`,
     fields: [
       { name: 'clientId', label: 'Клиент', type: 'select', options: optClients(), required: true }, { name: 'metal', label: 'Металл', type: 'select', options: optMetals(), required: true },
-      { name: 'saleForm', label: 'Форма продажи', type: 'select', options: opt(['с НДС', 'без НДС', 'экспорт']), required: true }, { name: 'pickupLocId', label: 'Место забора (по умолчанию для контрактов)', type: 'select', options: DB.locations.filter(l => l.type !== 'asset' || true).map(l => ({ value: l.id, label: l.name })), value: 'L-P1', required: true },
+      { name: 'saleForm', label: 'Форма продажи', type: 'select', options: opt(['с НДС', 'без НДС', 'экспорт']), required: true }, { name: 'priceBasis', label: 'База цены', type: 'select', options: Object.entries(PRICE_BASIS).map(([value, label]) => ({ value, label })), value: 'chem', required: true, hint: 'от какой массы считается стоимость: Au обычно ХЧ, Ag чаще лигатура' }, { name: 'pickupLocId', label: 'Место забора (по умолчанию для контрактов)', type: 'select', options: DB.locations.filter(l => l.type !== 'asset' || true).map(l => ({ value: l.id, label: l.name })), value: 'L-P1', required: true },
       { name: 'exchangeQuote', label: 'Биржевая котировка, $/тр. унц.', type: 'number', step: '0.01', required: true, value: 3400 }, { name: 'discount', label: 'Дисконт (−) / премия (+), %', type: 'number', step: '0.01', value: -0.4, required: true },
       { name: 'rate', label: 'Курс ориентировочный, ₽ за 1 USD', type: 'number', step: '0.0001', value: 88.5, required: true }, { name: 'carrierId', label: 'Спецперевозчик', type: 'select', options: optCarriers(), required: true },
       { name: 'logistics', label: 'Чья логистика', type: 'select', options: [{ value: 'buyer', label: LOGISTICS.buyer }, { value: 'our', label: LOGISTICS.our }], required: true }, { name: 'payTerms', label: 'Условия оплаты', type: 'select', options: opt(['полная предоплата', 'частичная предоплата', 'постоплата']), required: true },
@@ -3322,7 +3395,11 @@ function formNewDeal() {
   });
 }
 function formAddContract(d) {
-  const assets = DB.assets.filter(a => canSee(a.groupId));
+  let oSeq = 0;
+  const oRow = () => { const i = ++oSeq; return `<tr class="or-row" data-row="${i}"><td><select name="os_${i}" id="f_os_${i}"><option value="">—</option></select></td><td class="calc" data-c="omn_${i}">—</td><td class="num calc" data-c="oav_${i}">—</td><td class="num"><input type="text" inputmode="decimal" class="numfmt" name="om_${i}" placeholder="г"></td><td class="num calc" data-c="osh_${i}">—</td><td class="num"><button type="button" class="btn sm icon" data-rm="${i}" title="Убрать строку">×</button></td></tr>`; };
+  const readO = form => [...form.querySelectorAll('tr.or-row')].map(tr => { const i = tr.dataset.row; return { i, sourceId: form.elements['os_' + i].value, mass: parseIn(form.elements['om_' + i].value) }; });
+  const setO = (form, key, html) => { const td = form.querySelector(`[data-c="${key}"]`); if (td) td.innerHTML = html; };
+  const assets = ownerAssets().filter(a => canSee(a.groupId) && !a.external);
   const defAsset = assets.find(a => { const acc = findAccountByLoc(a.id, d.pickupLocId, d.metal); return acc && acc.balance > 0; }) || assets[0];
   openForm({
     title: `Добавить контракт в сделку ${d.id}`, tag: stage('mvp2', 'А11'), wide: true,
@@ -3331,24 +3408,46 @@ function formAddContract(d) {
       { name: 'assetId', label: 'Продавец (собственник)', type: 'select', options: assets.map(a => ({ value: a.id, label: a.name })), value: defAsset.id, required: true },
       { name: 'pickupLocId', label: 'Место забора', type: 'select', options: DB.locations.filter(l => l.type !== 'asset').concat(DB.locations.filter(l => l.type === 'asset')).map(l => ({ value: l.id, label: l.name })), value: d.pickupLocId, required: true },
       { name: 'date', label: 'Дата контракта', type: 'date', value: DB.today, required: true, max: DB.today, hint: 'дата списания; не позже учётной' },
-      { name: 'sourceId', label: 'Происхождение металла', type: 'select', options: [{ value: '', label: 'собственный металл продавца' }, ...DB.sources.filter(x => x.kind === 'purchased' && usesOrigins(x.assetId)).map(x => ({ value: x.id, label: `${assetName(x.assetId)}: ${x.code} · ${x.name}` }))], value: '', hint: 'у ПМ продажа может идти из покупного сырья; у АР всегда собственный' },
       { name: 'ligMass', label: 'Лигатурная масса, г', type: 'number', step: '0.1', required: true, value: d.metal === 'Au' ? 12002.4 : 20014 },
       { name: 'fineness', label: 'Проба, %', type: 'number', step: '0.01', required: true, value: 99.99, hint: 'чистота аффинированного металла по паспорту завода; 99,99 % по умолчанию' },
       { name: 'mass', label: 'Масса итоговая (хим. чистая), г', type: 'number', step: '0.1', hint: 'подставлено лигатурная × проба; поправьте по паспорту слитков, если отличается' },
+      { name: 'vat', label: 'Счёт списания', type: 'select', options: [{ value: '0', label: 'без НДС — собственный металл' }, { value: '1', label: 'с НДС — покупной металл' }], value: '0', required: true, full: true, hint: 'покупной металл продаётся только с НДС, на экспорт или в ЕАЭС' },
+      { type: 'html', html: `<div id="orWrap"><div class="fsec" style="margin:4px 0 6px">Происхождение металла (у кого куплено сырьё)</div><table class="tbl compact or-rows" id="orRows"><thead><tr><th>Происхождение (компания)</th><th>Контур</th><th class="num">На счёте</th><th class="num">Масса ХЧ, г</th><th class="num">Доля</th><th></th></tr></thead><tbody>${oRow()}</tbody></table><div style="margin-top:6px"><button type="button" class="btn sm" id="addORow">+ Добавить строку</button> <span class="muted small">если в контракте металл от нескольких компаний; сумма строк = масса контракта</span></div></div>` },
     ],
     live: (v, form) => {
+      if (!form.dataset.orWired) {
+        form.dataset.orWired = '1';
+        form.addEventListener('input', e => { if ((e.target.name || '') === 'om_1') form.dataset.o1Touched = '1'; }, true);
+        form.querySelector('#addORow').onclick = () => { form.querySelector('#orRows tbody').insertAdjacentHTML('beforeend', oRow()); form.dispatchEvent(new Event('input')); };
+        form.addEventListener('click', e => { const b = e.target.closest('[data-rm]'); if (!b) return; if (form.querySelectorAll('tr.or-row').length > 1) form.querySelector(`tr.or-row[data-row="${b.dataset.rm}"]`).remove(); form.dispatchEvent(new Event('input')); });
+      }
       autoField(form, v, 'mass', x => r1((x.ligMass || 0) * (x.fineness || 0) / 100) || null);
       const mass = v.mass != null ? v.mass : r1((v.ligMass || 0) * (v.fineness || 0) / 100);
-      const acc = v.assetId && v.pickupLocId ? findAccountByLoc(v.assetId, v.pickupLocId, d.metal) : null;
+      const vat = v.vat === '1';
+      const acc = v.assetId && v.pickupLocId ? findAccountByLoc(v.assetId, v.pickupLocId, d.metal, vat) : null;
       const loc = locById(v.pickupLocId);
-      let out = `<div class="lr"><span>Масса / стоимость по котировке ${fmtNum(d.quote, 2)}</span><b>${fmtKg(mass)} · ${fmtUsd(r2(d.quote * mass / OZ))} (≈ ${fmtRub(r2(d.quote * mass / OZ * d.rate))})</b></div>`;
+      form.querySelector('#orWrap').style.display = vat ? '' : 'none';
+      // строки происхождения: единственная строка повторяет массу контракта, пока её не правили
+      const single = form.querySelectorAll('tr.or-row').length === 1;
+      if (single && !form.dataset.o1Touched && form.elements['om_1'] && document.activeElement !== form.elements['om_1']) form.elements['om_1'].value = fmtIn(mass || '');
+      let oRows = readO(form); oRows.forEach(r => syncSourceOptions(form, v.assetId || '', 'os_' + r.i, true)); oRows = readO(form);
+      oRows.forEach(r => { const av = acc && r.sourceId ? accountOriginBalance(acc.id, r.sourceId) : null; setO(form, 'omn_' + r.i, r.sourceId ? (asset(r.sourceId).external ? 'внешний' : 'внутренний') : '—'); setO(form, 'oav_' + r.i, av == null ? '—' : `<span class="${r.mass != null && r.mass > av ? 'neg' : ''}">${fmtKg(av)}</span>`); setO(form, 'osh_' + r.i, mass && r.mass != null ? r2(r.mass / mass * 100) + ' %' : '—'); });
+      const oSum = r1(sum(oRows, r => r.mass || 0)), oOk = Math.abs(oSum - mass) < 0.06;
+      const priceMass = d.priceBasis === 'lig' ? (v.ligMass || 0) : mass;
+      let out = `<div class="lr"><span>Масса / стоимость по котировке ${fmtNum(d.quote, 2)} <span class="muted small">(${PRICE_BASIS[d.priceBasis === 'lig' ? 'lig' : 'chem']})</span></span><b>${fmtKg(mass)} · ${fmtUsd(r2(d.quote * priceMass / OZ))} (≈ ${fmtRub(r2(d.quote * priceMass / OZ * d.rate))})</b></div>`;
+      if (vat) out += `<div class="lr"><span>Происхождение: строк ${oRows.length}</span><b class="${oOk ? 'pos' : 'neg'}" title="${oOk ? 'сумма строк равна массе контракта' : 'сумма строк не равна массе контракта'}">${fmtKg(oSum)} из ${fmtKg(mass)}</b></div>`;
       out += `<div class="lr"><span>Счёт-источник</span><b>${acc ? `${esc(accountName(acc))}: остаток ${fmtKg(acc.balance)} → после списания ${fmtKg(r1(acc.balance - mass))}` : '<span class="neg">счёта нет — сохранение будет заблокировано</span>'}</b></div>`;
       if (acc && mass > acc.balance) out += `<div class="lr"><span></span><b class="warn">Масса больше остатка — остаток станет отрицательным; сохранение не блокируется, счёт попадёт в «Требует внимания»</b></div>`;
-      if (loc && loc.type === 'processor' && isRefinery(loc.ownerProc)) { const lim = activeLimit(v.assetId, d.metal); out += `<div class="lr"><span>Лимит ${lim ? esc(lim.name) : ''}</span><b class="${!lim || limitRemaining(lim) - mass < 0 ? 'warn' : ''}">${lim ? `остаток ${fmtKg(limitRemaining(lim))} → ${fmtKg(r1(limitRemaining(lim) - mass))}${limitRemaining(lim) - mass < 0 ? ' — превышение, только предупреждение' : ''}` : 'действующего лимита нет — предупреждение'}</b></div>`; }
+      if (loc && loc.type === 'processor' && isRefinery(loc.ownerProc)) { const lim = activeLimit(v.assetId, d.metal); out += `<div class="lr"><span>Лимит ${lim ? esc(lim.name) : ''}</span><b class="${!lim || limitRemaining(lim) - (v.ligMass || mass) < 0 ? 'warn' : ''}">${lim ? `остаток ${fmtKg(limitRemaining(lim))} → ${fmtKg(r1(limitRemaining(lim) - (v.ligMass || mass)))} <span class="muted small">по лигатуре</span>${limitRemaining(lim) - (v.ligMass || mass) < 0 ? ' — превышение, только предупреждение' : ''}` : 'действующего лимита нет — предупреждение'}</b></div>`; }
       else out += `<div class="lr"><span>Лимит</span><b class="muted">не расходуется (забор не с аффинажного завода)</b></div>`;
       return out;
     },
-    submit: v => { const { c, warnings } = createSalesContract(d, { assetId: v.assetId, pickupLocId: v.pickupLocId, date: v.date, sourceId: v.sourceId || null, ligMass: v.ligMass, fineness: v.fineness, mass: v.mass != null ? v.mass : undefined }); refreshDealStatus(d); toast('Контракт ' + c.id + ' создан: металл списан со счёта', 'ok'); warnings.forEach(w => toast(w, 'warn', 9000)); }, submitLabel: 'Создать контракт',
+    submit: (v, form) => {
+      const mass = v.mass != null ? v.mass : r1((v.ligMass || 0) * (v.fineness || 0) / 100);
+      let os = v.vat === '1' ? readO(form).filter(r => r.sourceId) : [];
+      if (v.vat === '1' && !os.length) throw new Error('Счёт «с НДС»: укажите происхождение — компанию, у которой куплено сырьё.');
+      if (os.length > 1) { if (os.some(r => r.mass == null)) throw new Error('Заполните массу в каждой строке происхождения или уберите лишнюю строку.'); const t = r1(sum(os, r => r.mass)); if (Math.abs(t - mass) > 0.06) throw new Error(`Сумма по строкам происхождения ${fmtNum(t, 1)} г не равна массе контракта ${fmtNum(mass, 1)} г.`); }
+      const { c, warnings } = createSalesContract(d, { assetId: v.assetId, pickupLocId: v.pickupLocId, date: v.date, origins: os.length ? os.map(r => ({ sourceId: r.sourceId, mass: os.length === 1 ? mass : r.mass })) : null, ligMass: v.ligMass, fineness: v.fineness, mass: v.mass != null ? v.mass : undefined }); refreshDealStatus(d); toast('Контракт ' + c.id + ' создан: металл списан со счёта', 'ok'); warnings.forEach(w => toast(w, 'warn', 9000)); }, submitLabel: 'Создать контракт',
   });
 }
 function formEditContract(c) {
@@ -3383,6 +3482,10 @@ function formReceivePayment(p) {
 
 /* ================= АФФИНАЖНЫЕ СЧЕТА и ТРАНЗАКЦИИ ================= */
 const ACC_TYPE = { asset: 'площадка собственника', processor: 'переработчик', carrier: 'спецперевозчик' };
+/* Отображение счёта: «Локация» — название места, где лежит металл; «Тип счёта» — вид этого места. На ключ счёта (собственник × НДС × локация × металл) тип не влияет. */
+const ACC_KIND = { refinery: 'аффинажный завод', inter: 'промежуточный переработчик', carrier: 'склад спецперевозчика', asset: 'склад актива' };
+function accKind(a) { return a.type === 'processor' ? (isRefinery(locById(a.locId).ownerProc) ? ACC_KIND.refinery : ACC_KIND.inter) : a.type === 'carrier' ? ACC_KIND.carrier : ACC_KIND.asset; }
+function accLocName(a) { return locName(a.locId); }
 function viewAccounts() {
   const rows = vis.accounts();
   const planned = DB.accruals.filter(a => a.status === 'Планируется');
@@ -3404,13 +3507,13 @@ function viewAccounts() {
   }
   const tiles = mode === 'plan' ? tilesPlan : tilesNow;
   return listPage({
-    id: 'accs', title: 'Аффинажные (учётные) счета', titleExtra: stage('mvp1'), subtitle: 'Ключ счёта: собственник × тип счёта × локация × металл. Остаток = сумма транзакций; вручную не редактируется.',
+    id: 'accs', title: 'Аффинажные (учётные) счета', titleExtra: stage('mvp1'), subtitle: 'Счёт = собственник × НДС / без НДС × переработчик (локация) × металл. «Без НДС» — собственный металл, «с НДС» — покупной. Остаток = сумма транзакций; вручную не редактируется.',
     actions: `<button class="btn" data-act="repostAll" ${isAdmin() ? '' : 'disabled title="Только администратор"'}>Перепровести все документы ${stage('mvp1', 'А36')}</button>`,
     note: switcher + tiles + ownersTbl,
     rows, search: r => [r.id, accountName(r)].join(' '),
-    filters: [{ key: 'asset', label: 'Собственник', options: optAssets(), get: r => r.assetId }, { key: 'type', label: 'Тип счёта', options: Object.entries(ACC_TYPE).map(([k, v]) => ({ value: k, label: v })), get: r => r.type }, { key: 'metal', label: 'Металл', options: optMetals(), get: r => r.metal }],
+    filters: [{ key: 'asset', label: 'Собственник', options: optAssets(), get: r => r.assetId }, { key: 'loc', label: 'Локация', options: [...new Set(rows.map(r => accLocName(r)))].sort().map(l => ({ value: l, label: l })), get: r => accLocName(r) }, { key: 'kind', label: 'Тип счёта', options: Object.values(ACC_KIND).map(v => ({ value: v, label: v })), get: r => accKind(r) }, { key: 'metal', label: 'Металл', options: optMetals(), get: r => r.metal }, { key: 'vat', label: 'НДС', options: [{ value: '0', label: 'без НДС' }, { value: '1', label: 'с НДС' }], get: r => r.vat ? '1' : '0' }],
     cols: [
-      { key: 'id', label: 'Счёт', render: r => `<b>${esc(r.id)}</b>` }, { key: 'asset', label: 'Собственник', val: r => assetName(r.assetId) }, { key: 'type', label: 'Тип счёта', val: r => ACC_TYPE[r.type] }, { key: 'loc', label: 'Локация', val: r => r.locId ? locName(r.locId) : '—' }, { key: 'metal', label: 'Металл', render: r => metalTag(r.metal), sortVal: r => r.metal },
+      { key: 'id', label: 'Счёт', render: r => `<b>${esc(r.id)}</b>` }, { key: 'asset', label: 'Собственник', val: r => assetName(r.assetId) }, { key: 'loc', label: 'Локация', val: r => accLocName(r) }, { key: 'kind', label: 'Тип счёта', val: r => accKind(r) }, { key: 'metal', label: 'Металл', render: r => metalTag(r.metal), sortVal: r => r.metal }, { key: 'vat', label: 'НДС', render: r => vatBadge(r.vat), sortVal: r => r.vat ? 1 : 0 },
       ...(mode === 'now' ? [
         { key: 'bal', label: 'Остаток', num: true, sortVal: r => r.balance, render: r => `<b class="${r.balance < 0 ? 'neg' : ''}">${fmtKg(r.balance)}</b>${r.balance < 0 ? ' <span class="badge red">отрицательный</span>' : ''}` },
         { key: 'exp', label: 'Плановые начисления', num: true, sortVal: r => sum(planned.filter(a => a.accountId === r.id), a => a.planMass), render: r => { const v = sum(planned.filter(a => a.accountId === r.id), a => a.calcMass != null ? a.calcMass : a.planMass); return v ? fmtKg(v) : '<span class="muted">—</span>'; } },
@@ -3442,14 +3545,14 @@ function viewAccount(id) {
         { key: 'bal', label: 'Остаток', num: true, sortVal: r => r.balance, render: r => `<b class="${r.balance < 0 ? 'neg' : ''}">${fmtKg(r.balance)}</b>` },
       ], empty: 'За период движений, плановых начислений и прогноза нет' })}</div>`; }
   if (t.cur === 'orig') { const bySrc = {}; txs.forEach(x => { const k = x.sourceId || ownSource(a.assetId).id; bySrc[k] = bySrc[k] || { src: k, bal: 0, inQ: 0, outQ: 0, n: 0 }; bySrc[k].bal = r1(bySrc[k].bal + x.qty); if (x.qty > 0) bySrc[k].inQ = r1(bySrc[k].inQ + x.qty); else bySrc[k].outQ = r1(bySrc[k].outQ + x.qty); bySrc[k].n++; }); const expS = {}; planned.concat(fc).forEach(x => { const k = x.sourceId || ownSource(a.assetId).id; expS[k] = r1((expS[k] || 0) + (x.calcMass != null ? x.calcMass : x.planMass)); }); Object.keys(expS).forEach(k => { bySrc[k] = bySrc[k] || { src: k, bal: 0, inQ: 0, outQ: 0, n: 0 }; });
-    body = `<div class="panel"><div class="pt"><h2>Остаток по происхождению</h2><span class="muted small">линии внутри одного счёта: своя руда и покупное сырьё (ПМ); списания контрактов относятся к указанному в контракте происхождению</span></div>${table({ id: 'accorig', compact: true, rows: Object.values(bySrc), cols: [
-      { key: 'src', label: 'Происхождение', render: r => `${originCell(a.assetId, r.src)} ${esc(originName(r.src))}` }, { key: 'kind', label: 'Вид', render: r => source(r.src) && source(r.src).kind === 'purchased' ? '<span class="badge violet">покупное</span>' : '<span class="badge green">собственное</span>' },
+    body = `<div class="panel"><div class="pt"><h2>Остаток по происхождению</h2><span class="muted small">${a.vat ? 'счёт «с НДС»: покупной металл по компаниям, от которых сырьё; по этим линиям продажа относится в их бюджет' : 'счёт «без НДС»: собственный металл'}</span></div>${table({ id: 'accorig', compact: true, rows: Object.values(bySrc), cols: [
+      { key: 'src', label: 'Происхождение (компания)', render: r => originCell(a.assetId, r.src) },
       { key: 'in', label: 'Начислено', num: true, render: r => fmtKg(r.inQ), total: sumCol(r => r.inQ) }, { key: 'out', label: 'Списано', num: true, render: r => fmtKg(r.outQ), total: sumCol(r => r.outQ) },
       { key: 'bal', label: 'Остаток', num: true, sortVal: r => r.bal, render: r => `<b class="${r.bal < 0 ? 'neg' : ''}">${fmtKg(r.bal)}</b>`, total: sumCol(r => r.bal) }, { key: 'exp', label: 'Ожидается (план + прогноз)', num: true, render: r => expS[r.src] ? fmtKg(expS[r.src]) : '<span class="muted">—</span>', total: sumCol(r => expS[r.src] || 0) }, { key: 'n', label: 'Транзакций', num: true, val: r => r.n },
     ], totals: true })}</div>`; }
   if (t.cur === 'recon') body = a.type === 'processor' ? `<div class="panel"><div class="pt"><h2>Акты сверки с переработчиком</h2>${stage('proto', 'ежемесячно')}<span class="muted small">наш остаток на конец месяца vs выписка завода</span></div>${reconTable((DB.reconciliations || []).filter(r => r.accountId === id))}<div style="margin-top:10px"><button class="btn" data-act="newRecon">+ Акт сверки за месяц</button></div></div>` : '<div class="panel"><div class="muted">Сверки ведутся только по счетам на переработчиках</div></div>';
   const actions = actionsMenu([{ label: 'Акт сверки за месяц', act: 'newRecon', tag: stage('proto'), disabled: a.type !== 'processor' }, 'sep', { hd: 'Администратор' }, { label: 'Корректировка остатка (по итогам сверки)', act: 'correction', tag: stage('mvp1'), disabled: !isAdmin(), title: isAdmin() ? '' : 'Только администратор' }]);
-  return `${pageHeader({ crumbs: link('#/accounts', 'Аффинажные счета') + ' / ' + esc(id), title: esc(accountName(a)), titleExtra: metalTag(a.metal), subtitle: `${esc(ACC_TYPE[a.type])}${a.locId ? ' · ' + esc(locName(a.locId)) : ''} · ${esc(group(asset(a.assetId).groupId).name)}`, actions })}
+  return `${pageHeader({ crumbs: link('#/accounts', 'Аффинажные счета') + ' / ' + esc(id), title: esc(accountName(a)), titleExtra: metalTag(a.metal) + ' ' + vatBadge(a.vat), subtitle: `${esc(ACC_TYPE[a.type])}${a.locId ? ' · ' + esc(locName(a.locId)) : ''} · ${esc(group(asset(a.assetId).groupId).name)}`, actions })}
   <div class="grid4">
     <div class="kpi ${a.balance < 0 ? 'bad' : 'ok'}"><div class="kl"><span>Остаток (доступно)</span></div><div class="kv ${a.balance < 0 ? 'neg' : ''}">${fmtKg(a.balance)}</div><div class="ks">сумма всех транзакций счёта (А19)</div></div>
     <div class="kpi"><div class="kl"><span>Ожидаемые начисления</span>${stage('mvp2')}</div><div class="kv">${fmtKg(sum(planned, x => x.calcMass != null ? x.calcMass : x.planMass))}</div><div class="ks">${planned.length} в статусе «Планируется»${fc.length ? ` · прогноз до приёмки ${fmtKg(sum(fc, f => f.planMass))} (${fc.length})` : ''}</div></div>
@@ -3478,7 +3581,7 @@ function formCorrection(a) {
   openForm({
     title: `Корректировка остатка: ${accountName(a)}`, tag: stage('mvp1', '3.3.8'),
     note: `<div class="note warn">Ручная транзакция без документа-основания: расхождения по сверке, металл по квартальному паспорту на шлак, возврат проб. Создаёт только администратор.</div>`,
-    fields: [{ name: 'reason', label: 'Основание', type: 'select', options: opt(CORRECTION_REASONS), required: true }, usesOrigins(a.assetId) ? { name: 'sourceId', label: 'Происхождение', type: 'select', options: assetSources(a.assetId).map(x => ({ value: x.id, label: `${x.code} · ${x.name}` })), value: ownSource(a.assetId).id, required: true } : null, { name: 'qty', label: 'Количество, г (со знаком)', type: 'number', step: '0.1', required: true }, { name: 'date', label: 'Дата (по документу)', type: 'date', value: DB.today, required: true, max: DB.today, hint: 'для шлака — дата паспорта; металл падает на остаток этой датой' }, { name: 'comment', label: 'Комментарий / номер документа', type: 'textarea', required: true, full: true }],
+    fields: [{ name: 'reason', label: 'Основание', type: 'select', options: opt(CORRECTION_REASONS), required: true }, a.vat ? { name: 'sourceId', label: 'Происхождение (у кого куплен металл)', type: 'select', options: assetSources(a.assetId).filter(x => x.id !== a.assetId).map(x => ({ value: x.id, label: x.name })), required: true } : null, { name: 'qty', label: 'Количество, г (со знаком)', type: 'number', step: '0.1', required: true }, { name: 'date', label: 'Дата (по документу)', type: 'date', value: DB.today, required: true, max: DB.today, hint: 'для шлака — дата паспорта; металл падает на остаток этой датой' }, { name: 'comment', label: 'Комментарий / номер документа', type: 'textarea', required: true, full: true }],
     live: v => `<div class="lr"><span>Остаток после корректировки</span><b>${fmtKg(r1(a.balance + (v.qty || 0)))}</b></div>`,
     submit: v => { addCorrection(a, v.qty, v.date, v.comment, v.reason, v.sourceId); toast('Корректировка проведена', 'ok'); },
   });
@@ -3512,12 +3615,13 @@ function viewTransfer(id) {
   <div class="panel"><div class="pt"><h2>Транзакции по счетам</h2><span class="muted small">по каждому металлу — списание с «Откуда» и начисление на «Куда» (А17)</span></div>${txTable(txs, { withAccount: true })}</div>${eventsPanel('transfer', id)}`;
 }
 function formNewTransfer() {
-  const assets = DB.assets.filter(a => canSee(a.groupId));
+  const assets = ownerAssets().filter(a => canSee(a.groupId));
   openForm({
     title: 'Создать перемещение', tag: stage('mvp1'), wide: true,
     note: `<div class="note info">Готовый металл можно переместить с завода на площадку собственника или склад спецперевозчика без продажи. Вывоз с аффинажного завода расходует лимит; последующая продажа со склада его повторно не расходует. Полуфабрикат на следующий этап переработки оформляется <b>отгрузкой МПФ</b>, не перемещением.</div>`,
     fields: [
       { name: 'assetId', label: 'Собственник', type: 'select', options: assets.map(a => ({ value: a.id, label: a.name })), required: true },
+      { name: 'sourceId', label: 'Происхождение металла', type: 'select', options: [], hint: 'собственный — со счёта «без НДС»; другая компания — со счёта «с НДС»' },
       { name: 'fromLocId', label: 'Откуда', type: 'select', options: DB.locations.map(l => ({ value: l.id, label: l.name })), value: 'L-P1', required: true },
       { name: 'toLocId', label: 'Куда', type: 'select', options: DB.locations.map(l => ({ value: l.id, label: l.name })), value: 'L-C1', required: true },
       { name: 'carrierId', label: 'Спецперевозчик', type: 'select', options: optCarriers(), required: true },
@@ -3530,21 +3634,22 @@ function formNewTransfer() {
       { name: 'comment', label: 'Комментарий', type: 'text', full: true },
     ],
     live: (v, form) => {
+      syncSourceOptions(form, v.assetId || ''); v.sourceId = form.elements.sourceId.value; const tVat = v.assetId ? isVat(v.assetId, v.sourceId) : false;
       METALS.forEach(m => autoField(form, v, m + '_mass', x => x[m + '_fineness'] != null ? r1((x.ligMass || 0) * x[m + '_fineness'] / 100) || null : null));
       let out = '';
       const from = locById(v.fromLocId), to = locById(v.toLocId);
       if (from && to && from.type === 'processor' && !isRefinery(from.ownerProc) && to.type === 'processor') return `<span class="neg">Со счёта промежуточного переработчика на локацию переработчика — это отгрузка МПФ на следующий этап. Сохранение будет заблокировано (8.4.1).</span>`;
-      METALS.forEach(m => { const mass = v[m + '_mass'] != null ? v[m + '_mass'] : (v[m + '_fineness'] != null && v.ligMass ? r1(v.ligMass * v[m + '_fineness'] / 100) : 0); if (!mass) return; const src = findAccountByLoc(v.assetId, v.fromLocId, m); const dst = findAccountByLoc(v.assetId, v.toLocId, m); out += `<div class="lr"><span>${m} ${fmtKg(mass)}: источник ${src ? esc(accountName(src)) : '<span class="neg">счёта нет — блок</span>'}</span><b class="${src && mass > src.balance ? 'neg' : ''}">${src ? `${fmtKg(src.balance)} → ${fmtKg(r1(src.balance - mass))}${mass > src.balance ? ' — нехватка, блок' : ''}` : ''}</b></div><div class="lr"><span>${m}: получатель ${dst ? esc(accountName(dst)) : 'счёт будет создан'}</span><b>${dst ? `${fmtKg(dst.balance)} → ${fmtKg(r1(dst.balance + mass))}` : `0 → ${fmtKg(mass)}`}</b></div>`; if (from && from.type === 'processor' && isRefinery(from.ownerProc)) { const lim = activeLimit(v.assetId, m); out += `<div class="lr"><span>${m}: лимит</span><b class="${!lim || limitRemaining(lim) - mass < 0 ? 'warn' : ''}">${lim ? `${esc(lim.name)}: остаток ${fmtKg(limitRemaining(lim))} → ${fmtKg(r1(limitRemaining(lim) - mass))}` : 'нет действующего лимита — предупреждение'}</b></div>`; } });
+      METALS.forEach(m => { const mass = v[m + '_mass'] != null ? v[m + '_mass'] : (v[m + '_fineness'] != null && v.ligMass ? r1(v.ligMass * v[m + '_fineness'] / 100) : 0); if (!mass) return; const src = findAccountByLoc(v.assetId, v.fromLocId, m, tVat); const dst = findAccountByLoc(v.assetId, v.toLocId, m, tVat); out += `<div class="lr"><span>${m} ${fmtKg(mass)}: источник ${src ? esc(accountName(src)) : '<span class="neg">счёта нет — блок</span>'}</span><b class="${src && mass > src.balance ? 'neg' : ''}">${src ? `${fmtKg(src.balance)} → ${fmtKg(r1(src.balance - mass))}${mass > src.balance ? ' — нехватка, блок' : ''}` : ''}</b></div><div class="lr"><span>${m}: получатель ${dst ? esc(accountName(dst)) : 'счёт будет создан'}</span><b>${dst ? `${fmtKg(dst.balance)} → ${fmtKg(r1(dst.balance + mass))}` : `0 → ${fmtKg(mass)}`}</b></div>`; if (from && from.type === 'processor' && isRefinery(from.ownerProc)) { const lim = activeLimit(v.assetId, m); out += `<div class="lr"><span>${m}: лимит</span><b class="${!lim || limitRemaining(lim) - (v[m + '_fineness'] ? r1(mass / v[m + '_fineness'] * 100) : mass) < 0 ? 'warn' : ''}">${lim ? `${esc(lim.name)}: остаток ${fmtKg(limitRemaining(lim))} → ${fmtKg(r1(limitRemaining(lim) - (v[m + '_fineness'] ? r1(mass / v[m + '_fineness'] * 100) : mass)))}` : 'нет действующего лимита — предупреждение'}</b></div>`; } });
       return out || '<span class="muted">Укажите массу хотя бы одного металла</span>';
     },
-    submit: v => { if (v.fromLocId === v.toLocId) throw new Error('«Откуда» и «Куда» совпадают.'); const { t, warnings } = createTransfer({ assetId: v.assetId, fromLocId: v.fromLocId, toLocId: v.toLocId, carrierId: v.carrierId, date: v.date, ligMass: v.ligMass, Au_fineness: v.Au_fineness, Au_mass: v.Au_mass, Ag_fineness: v.Ag_fineness, Ag_mass: v.Ag_mass, comment: v.comment }); toast('Перемещение ' + t.id + ' проведено на оба счёта', 'ok'); warnings.forEach(w => toast(w, 'warn', 9000)); setTimeout(() => go(H.transfer(t.id)), 0); }, submitLabel: 'Провести',
+    submit: v => { if (v.fromLocId === v.toLocId) throw new Error('«Откуда» и «Куда» совпадают.'); const { t, warnings } = createTransfer({ assetId: v.assetId, sourceId: v.sourceId || null, fromLocId: v.fromLocId, toLocId: v.toLocId, carrierId: v.carrierId, date: v.date, ligMass: v.ligMass, Au_fineness: v.Au_fineness, Au_mass: v.Au_mass, Ag_fineness: v.Ag_fineness, Ag_mass: v.Ag_mass, comment: v.comment }); toast('Перемещение ' + t.id + ' проведено на оба счёта', 'ok'); warnings.forEach(w => toast(w, 'warn', 9000)); setTimeout(() => go(H.transfer(t.id)), 0); }, submitLabel: 'Провести',
   });
 }
 
 /* ================= ЛИМИТЫ ================= */
 function viewLimits() {
   return listPage({
-    id: 'lims', title: 'Лимиты', titleExtra: stage('mvp1'), subtitle: 'Разрешённый объём забора одного металла собственником с аффинажных заводов за период. Расход — сумма масс неотменённых контрактов и перемещений со ссылкой на лимит; журнала движений нет. Лимит информационный: предупреждает, не блокирует.',
+    id: 'lims', title: 'Лимиты', titleExtra: stage('mvp1'), subtitle: 'Разрешённый объём забора одного металла собственником с аффинажных заводов за период. Считается в лигатурной массе. Расход — сумма лигатурных масс неотменённых контрактов и перемещений со ссылкой на лимит; журнала движений нет. Лимит информационный: предупреждает, не блокирует.',
     actions: `<button class="btn primary" data-act="newLimit">+ Внести лимит</button>`,
     rows: vis.limits(), search: r => [r.name, assetName(r.assetId)].join(' '),
     filters: [{ key: 'status', label: 'Статус', options: opt(['Действует', 'Архив']), get: r => r.status }, { key: 'asset', label: 'Собственник', options: optAssets(), get: r => r.assetId }, { key: 'metal', label: 'Металл', options: optMetals(), get: r => r.metal }],
@@ -3562,11 +3667,11 @@ function viewLimit(id) {
   const p = limitPct(l); const app = l.appId && DB.licenseApps.find(a => a.id === l.appId);
   const actions = `<button class="btn" data-act="editLimit">Редактировать</button>` + actionsMenu([{ label: 'Добавить корректировку', act: 'addAdj', tag: stage('mvp1'), disabled: l.status !== 'Действует' }, { label: 'Перевести в «Архив»', act: 'archiveLimit', tag: stage('mvp1'), disabled: l.status !== 'Действует' }, { label: 'Вернуть в «Действует»', act: 'activateLimit', tag: stage('mvp2', 'А18'), disabled: l.status !== 'Архив' }, 'sep', { label: 'Удалить лимит', disabled: true, title: 'По ТЗ (8.5.1) удалять лимит нельзя: история лимитов хранится' }]);
   return `${pageHeader({ crumbs: link('#/limits', 'Лимиты') + ' / ' + esc(l.name), title: esc(l.name), titleExtra: badge(l.status) + ' ' + metalTag(l.metal), subtitle: `${esc(assetName(l.assetId))} · период ${fmtD(l.dateFrom)} – ${fmtD(l.dateTo)} (справочно; подбор лимита — по статусу)`, actions })}
-  <div class="grid4"><div class="kpi"><div class="kl"><span>Установлено</span></div><div class="kv">${fmtKg(limitInstalled(l))}</div><div class="ks">объём ${fmtKg(l.volume)} + корректировки ${fmtKg(sum(adj, a => a.qty))}</div></div><div class="kpi"><div class="kl"><span>Израсходовано</span></div><div class="kv">${fmtKg(limitUsed(l))}</div><div class="ks">${scs.filter(c => c.status !== 'Отменена').length} контракт(ов), ${trs.filter(t => t.status === 'Проведено').length} перемещение(й)</div></div><div class="kpi ${limitRemaining(l) < 0 ? 'bad' : p >= 80 ? 'warn' : 'ok'}"><div class="kl"><span>Остаток</span></div><div class="kv ${limitRemaining(l) < 0 ? 'neg' : ''}">${fmtKg(limitRemaining(l))}</div><div class="ks">отрицательный подсвечивается, операции не блокируются</div></div><div class="kpi"><div class="kl"><span>Использовано</span></div><div class="kv">${fmtPct(p, 1)}</div><div class="bar"><i class="${p >= 90 ? 'red' : p >= 80 ? 'amber' : ''}" style="width:${Math.min(100, p)}%"></i></div><div class="ks">уведомления на 50/80/90 % — после MVP (А37)</div></div></div>
+  <div class="grid4"><div class="kpi"><div class="kl"><span>Установлено (лигатура)</span></div><div class="kv">${fmtKg(limitInstalled(l))}</div><div class="ks">объём ${fmtKg(l.volume)} + корректировки ${fmtKg(sum(adj, a => a.qty))}</div></div><div class="kpi"><div class="kl"><span>Израсходовано</span></div><div class="kv">${fmtKg(limitUsed(l))}</div><div class="ks">${scs.filter(c => c.status !== 'Отменена').length} контракт(ов), ${trs.filter(t => t.status === 'Проведено').length} перемещение(й)</div></div><div class="kpi ${limitRemaining(l) < 0 ? 'bad' : p >= 80 ? 'warn' : 'ok'}"><div class="kl"><span>Остаток</span></div><div class="kv ${limitRemaining(l) < 0 ? 'neg' : ''}">${fmtKg(limitRemaining(l))}</div><div class="ks">отрицательный подсвечивается, операции не блокируются</div></div><div class="kpi"><div class="kl"><span>Использовано</span></div><div class="kv">${fmtPct(p, 1)}</div><div class="bar"><i class="${p >= 90 ? 'red' : p >= 80 ? 'amber' : ''}" style="width:${Math.min(100, p)}%"></i></div><div class="ks">уведомления на 50/80/90 % — после MVP (А37)</div></div></div>
   <div class="panel" style="margin-top:14px">${fields([{ l: 'Документ-основание', v: esc(l.doc) }, { l: 'Заявка на лицензию', v: app ? refLink('license', app.id) + ' ' + stage('after') : '<span class="muted">— (лимит внесён вручную)</span>' }, { l: 'Статус', v: badge(l.status) }])}</div>
   <div class="panel"><div class="pt"><h2>Корректировки лимита</h2><span class="muted small">изменение установленного объёма по документу, без новой лицензии</span></div>${table({ id: 'ladj', compact: true, rows: adj, cols: [{ key: 'id', label: 'Номер', val: r => r.id }, { key: 'date', label: 'Дата', val: r => fmtD(r.date) }, { key: 'qty', label: 'Количество', num: true, render: r => `<b class="${r.qty < 0 ? 'neg' : 'pos'}">${r.qty > 0 ? '+' : ''}${fmtKg(r.qty)}</b>`, total: sumCol(r => r.qty) }, { key: 'doc', label: 'Документ', val: r => r.doc }, { key: 'comment', label: 'Комментарий', val: r => r.comment }, { key: 'author', label: 'Автор', val: r => user(r.author).name }, { key: 'act', label: '', sortable: false, render: r => rowActs([{ label: 'Удалить', act: 'deleteAdj', id: r.id, danger: true, disabled: !isAdmin(), title: 'Удаляет только администратор' }]) }], totals: true })}</div>
-  <div class="panel"><div class="pt"><h2>Контракты продажи со ссылкой на лимит</h2><span class="muted small">отменённые не входят в расход</span></div>${table({ id: 'lsc', compact: true, rows: scs, rowHref: r => H.contract(r.id), rowClass: r => r.status === 'Отменена' ? 'dim' : '', cols: [{ key: 'id', label: 'Контракт', val: r => r.id }, { key: 'deal', label: 'Сделка / клиент', val: r => `${r.dealId} · ${client(deal(r.dealId).clientId).name}` }, { key: 'date', label: 'Дата', val: r => fmtD(r.date) }, { key: 'mass', label: 'Масса', num: true, render: r => fmtKg(r.mass), total: sumCol(r => r.status !== 'Отменена' ? r.mass : 0) }, { key: 'status', label: 'Статус', render: r => badge(r.status) }], totals: true })}</div>
-  <div class="panel"><div class="pt"><h2>Перемещения со ссылкой на лимит</h2></div>${table({ id: 'ltr', compact: true, rows: trs, rowHref: r => H.transfer(r.id), rowClass: r => r.status === 'Отменено' ? 'dim' : '', cols: [{ key: 'id', label: 'Перемещение', val: r => r.id }, { key: 'date', label: 'Дата', val: r => fmtD(r.date) }, { key: 'route', label: 'Маршрут', val: r => `${locName(r.fromLocId)} → ${locName(r.toLocId)}` }, { key: 'mass', label: 'Масса ' + l.metal, num: true, render: r => fmtKg(r[l.metal + '_mass']), total: sumCol(r => r.status === 'Проведено' ? r[l.metal + '_mass'] : 0) }, { key: 'status', label: 'Статус', render: r => badge(r.status) }], totals: true })}</div>`;
+  <div class="panel"><div class="pt"><h2>Контракты продажи со ссылкой на лимит</h2><span class="muted small">отменённые не входят в расход</span></div>${table({ id: 'lsc', compact: true, rows: scs, rowHref: r => H.contract(r.id), rowClass: r => r.status === 'Отменена' ? 'dim' : '', cols: [{ key: 'id', label: 'Контракт', val: r => r.id }, { key: 'deal', label: 'Сделка / клиент', val: r => `${r.dealId} · ${client(deal(r.dealId).clientId).name}` }, { key: 'date', label: 'Дата', val: r => fmtD(r.date) }, { key: 'mass', label: 'Масса ХЧ', num: true, render: r => fmtKg(r.mass) }, { key: 'lig', label: 'Лигатура (расход)', num: true, render: r => fmtKg(contractLig(r)), total: sumCol(r => r.status !== 'Отменена' ? contractLig(r) : 0) }, { key: 'status', label: 'Статус', render: r => badge(r.status) }], totals: true })}</div>
+  <div class="panel"><div class="pt"><h2>Перемещения со ссылкой на лимит</h2></div>${table({ id: 'ltr', compact: true, rows: trs, rowHref: r => H.transfer(r.id), rowClass: r => r.status === 'Отменено' ? 'dim' : '', cols: [{ key: 'id', label: 'Перемещение', val: r => r.id }, { key: 'date', label: 'Дата', val: r => fmtD(r.date) }, { key: 'route', label: 'Маршрут', val: r => `${locName(r.fromLocId)} → ${locName(r.toLocId)}` }, { key: 'mass', label: 'Лигатура ' + l.metal + ' (расход)', num: true, render: r => fmtKg(transferLig(r, l.metal)), total: sumCol(r => r.status === 'Проведено' ? transferLig(r, l.metal) : 0) }, { key: 'status', label: 'Статус', render: r => badge(r.status) }], totals: true })}</div>`;
 }
 function formAddAdj(l) { openForm({ title: `Корректировка лимита ${l.name}`, tag: stage('mvp1'), fields: [{ name: 'qty', label: 'Количество, г (со знаком)', type: 'number', step: '0.1', required: true }, { name: 'date', label: 'Дата документа', type: 'date', value: DB.today, required: true }, { name: 'comment', label: 'Комментарий / документ', type: 'textarea', required: true, full: true }], live: v => `<div class="lr"><span>Установлено после корректировки</span><b>${fmtKg(r1(limitInstalled(l) + (v.qty || 0)))}</b></div><div class="lr"><span>Остаток</span><b>${fmtKg(r1(limitRemaining(l) + (v.qty || 0)))}</b></div>`, submit: v => { addLimitAdjustment(l, v.qty, v.date, v.comment); toast('Корректировка добавлена, «Установлено» пересчитано', 'ok'); } }); }
 function formNewLimit() {
@@ -3640,7 +3745,7 @@ function viewAnalytics() {
 
 /* ================= СПРАВОЧНИКИ ================= */
 const REFS = [
-  { key: 'groups', label: 'Группы собственников', st: 'mvp1' }, { key: 'assets', label: 'Собственники (ГОКи)', st: 'mvp1' }, { key: 'processors', label: 'Переработчики', st: 'mvp1' }, { key: 'carriers', label: 'Спецперевозчики', st: 'mvp1' }, { key: 'locations', label: 'Локации', st: 'mvp1' }, { key: 'metals', label: 'Металлы', st: 'mvp1' }, { key: 'productTypes', label: 'Типы продукции', st: 'mvp1' }, { key: 'clients', label: 'Клиенты', st: 'mvp1' }, { key: 'users', label: 'Пользователи и роли', st: 'proto' }, { key: 'deliveryTerms', label: 'Сроки доставки', st: 'mvp2' }, { key: 'arbThresholds', label: 'Пороги арбитража', st: 'mvp2' }, { key: 'calendar', label: 'Производственный календарь', st: 'mvp2' }, { key: 'sources', label: 'Происхождение металла', st: 'mvp1' }, { key: 'params', label: 'Параметры учёта', st: 'mvp1' }, { key: 'lists', label: 'Списки значений', st: 'mvp1' },
+  { key: 'groups', label: 'Группы собственников', st: 'mvp1' }, { key: 'assets', label: 'Компании', st: 'mvp1' }, { key: 'processors', label: 'Переработчики', st: 'mvp1' }, { key: 'carriers', label: 'Спецперевозчики', st: 'mvp1' }, { key: 'locations', label: 'Локации', st: 'mvp1' }, { key: 'metals', label: 'Металлы', st: 'mvp1' }, { key: 'productTypes', label: 'Типы продукции', st: 'mvp1' }, { key: 'clients', label: 'Клиенты', st: 'mvp1' }, { key: 'users', label: 'Пользователи и роли', st: 'proto' }, { key: 'deliveryTerms', label: 'Сроки доставки', st: 'mvp2' }, { key: 'arbThresholds', label: 'Пороги арбитража', st: 'mvp2' }, { key: 'calendar', label: 'Производственный календарь', st: 'mvp2' }, { key: 'params', label: 'Параметры учёта', st: 'mvp1' }, { key: 'lists', label: 'Списки значений', st: 'mvp1' },
 ];
 function viewRefs(name) {
   const cur = name || 'assets';
@@ -3651,7 +3756,7 @@ function viewRefs(name) {
   const T = (rows, cols, extra = {}) => table({ id: 'ref_' + cur, compact: true, rows, cols, ...extra });
   switch (cur) {
     case 'groups': body = T(DB.groups, [{ key: 'name', label: 'Название', val: r => r.name }, { key: 'origins', label: 'Происхождение металла', render: r => r.origins ? '<span class="badge violet">ведётся</span> <span class="muted small">источники внутри собственника</span>' : '<span class="muted">не ведётся — равно собственнику</span>' }, { key: 'users', label: 'Сотрудники группы', val: r => DB.users.filter(u => u.groupId === r.id).map(u => u.name).join(', ') }, { key: 'assets', label: 'Собственники', val: r => DB.assets.filter(a => a.groupId === r.id).map(a => a.name).join(', ') }, ACT]); break;
-    case 'assets': body = T(DB.assets, [{ key: 'name', label: 'Название', render: r => esc(r.name) + (r.external ? ' <span class="badge amber small">внешний собственник</span>' : ''), sortVal: r => r.name }, { key: 'legal', label: 'Юрлицо, реквизиты', val: r => r.legal }, { key: 'group', label: 'Группа собственников', val: r => group(r.groupId).name }, { key: 'loc', label: 'Локации собственника', val: r => DB.locations.filter(l => l.ownerAsset === r.id).map(l => l.name).join(', ') }, { key: 'lim', label: 'Лимиты', render: r => DB.limits.filter(l => l.assetId === r.id).map(l => refLink('limit', l.id, `${l.metal} ${l.status === 'Действует' ? '✓' : '(архив)'}`)).join(', ') || '—' }, { key: 'acc', label: 'Счетов', num: true, val: r => DB.accounts.filter(a => a.assetId === r.id).length }, ACT]); break;
+    case 'assets': body = `<div class="note info small">Один справочник для всех компаний. <b>Внутренний контур</b> — активы группы: владеют металлом и продают его. <b>Внешний контур</b> — сторонние компании: либо мы перерабатываем их металл и возвращаем (тогда указана группа, как у Казахалтына), либо у них куплено сырьё. В партии на справочник смотрят два поля: «Собственник» (чей металл сейчас) и «Происхождение» (у кого он был раньше; по умолчанию сам собственник). Происхождение ≠ собственник → металл покупной и идёт на счёт «с НДС».</div>` + T(DB.assets, [{ key: 'name', label: 'Название', render: r => esc(r.name), sortVal: r => r.name }, { key: 'contour', label: 'Контур', render: r => r.external ? '<span class="badge violet small">внешний</span>' : '<span class="badge green small">внутренний</span>', sortVal: r => r.external ? 1 : 0 }, { key: 'legal', label: 'Юрлицо, реквизиты', val: r => r.legal }, { key: 'group', label: 'Группа собственников', render: r => r.groupId ? esc(group(r.groupId).name) : '<span class="muted">— (видна всем)</span>', sortVal: r => r.groupId || '' }, { key: 'role', label: 'Где используется', render: r => { const own = DB.lots.some(l => l.assetId === r.id), org = DB.lots.some(l => l.sourceId === r.id && l.assetId !== r.id); return [own ? 'собственник' : '', org ? 'происхождение' : ''].filter(Boolean).join(' · ') || '<span class="muted">—</span>'; }, sortable: false }, { key: 'loc', label: 'Локации собственника', val: r => DB.locations.filter(l => l.ownerAsset === r.id).map(l => l.name).join(', ') }, { key: 'lim', label: 'Лимиты', render: r => DB.limits.filter(l => l.assetId === r.id).map(l => refLink('limit', l.id, `${l.metal} ${l.status === 'Действует' ? '✓' : '(архив)'}`)).join(', ') || '—' }, { key: 'acc', label: 'Счетов', num: true, val: r => DB.accounts.filter(a => a.assetId === r.id).length }, ACT]); break;
     case 'processors': body = T(DB.processors, [{ key: 'name', label: 'Название', val: r => r.name }, { key: 'type', label: 'Тип переработчика', render: r => r.type === 'refinery' ? badge('Действует').replace('Действует', 'аффинажный завод (финальный)') : '<span class="badge violet">промежуточный переработчик</span>' }, { key: 'out', label: 'Тип выходного продукта по умолчанию', val: r => productType(r.outputProductId).name }, { key: 'loc', label: 'Локация переработчика', val: r => locName(r.locId) }, { key: 'contracts', label: 'Договоры', render: r => DB.procContracts.filter(c => c.procId === r.id).map(c => refLink('procContract', c.id, c.no)).join(', ') }, ACT]); break;
     case 'carriers': body = T(DB.carriers, [{ key: 'name', label: 'Название', val: r => r.name }, { key: 'acc', label: 'Данные аккредитации', val: r => r.accreditation }, { key: 'wh', label: 'Склад (локация)', val: r => r.warehouseLocId ? locName(r.warehouseLocId) : '—' }, ACT]); break;
     case 'locations': body = T(DB.locations, [{ key: 'name', label: 'Название', val: r => r.name }, { key: 'type', label: 'Тип', val: r => ACC_TYPE[r.type] }, { key: 'owner', label: 'Владелец', val: r => r.ownerAsset ? assetName(r.ownerAsset) : r.ownerProc ? procName(r.ownerProc) : r.ownerCarrier ? carrier(r.ownerCarrier).name : '—' }, { key: 'addr', label: 'Адрес', val: r => r.address }, ACT]); break;
@@ -3661,7 +3766,6 @@ function viewRefs(name) {
     case 'users': body = `<div class="note info small">Пользователи для переключения ролей и видимости по группам собственников. Отдельной бизнес-сущности «Менеджер» в ТЗ нет; полный перечень ролей — [Дополнить].</div>` + T(DB.users, [{ key: 'name', label: 'Имя', val: r => r.name }, { key: 'role', label: 'Роль', val: r => r.roleName }, { key: 'group', label: 'Группа собственников', val: r => r.groupId ? group(r.groupId).name : 'уровень компании (видит всё)' }, { key: 'rights', label: 'Базовые права', val: r => r.role === 'admin' ? 'просмотр, создание, изменение, удаление; корректировки; перепроведение' : r.role === 'head' ? 'просмотр, создание, изменение' : r.role === 'finance' ? 'просмотр; отметка оплат' : 'просмотр, создание, изменение в своей группе' }, ACT]); break;
     case 'deliveryTerms': body = T(DB.deliveryTerms, [{ key: 'from', label: 'Откуда', val: r => locName(r.fromLocId) }, { key: 'to', label: 'Куда', val: r => locName(r.toLocId) }, { key: 'method', label: 'Способ доставки', val: r => r.method }, { key: 'days', label: 'Срок, календарных дней', num: true, val: r => r.days }, ACT]); break;
     case 'arbThresholds': body = T(DB.arbThresholds, [{ key: 'metal', label: 'Металл', render: r => metalTag(r.metal) }, { key: 'value', label: 'Допустимое расхождение', num: true, val: r => fmtNum(r.value, 2) }, { key: 'unit', label: 'Единицы', render: r => esc(r.unit) + ' ' + stage('q', 'абсолютные или относительные — [Дополнить]') }, { key: 'act', label: '', sortable: false, render: r => refRowBtns('arbThresholds', r.metal, false) }]); break;
-    case 'sources': body = `<div class="note info small">Происхождение металла внутри собственника: своя руда, покупное сырьё у других компаний, хвосты, гравиконцентрат. Ведётся для групп с признаком «происхождение ведётся» (ПМ); у остальных (АР) источник один — собственный, подставляется автоматически.</div>` + T(DB.assets.flatMap(a => assetSources(a.id)), [{ key: 'asset', label: 'Собственник', val: r => assetName(r.assetId) }, { key: 'group', label: 'Группа', val: r => group(asset(r.assetId).groupId).name }, { key: 'code', label: 'Код', val: r => r.code }, { key: 'name', label: 'Название', val: r => r.name }, { key: 'kind', label: 'Вид', render: r => r.kind === 'purchased' ? '<span class="badge violet">покупное</span>' : '<span class="badge green">собственное</span>' }, { key: 'supplier', label: 'У кого куплено', val: r => r.supplier || '' }, { key: 'used', label: 'Партий', num: true, val: r => DB.lots.filter(l => l.sourceId === r.id).length }, { key: 'act', label: '', sortable: false, render: r => usesOrigins(r.assetId) ? refRowBtns('sources', r.id, r.kind !== 'own') : '<span class="muted small">авто</span>' }]); break;
     case 'calendar': body = `<div class="note info small">Упрощённый календарь: выходные — суббота и воскресенье, плюс перечисленные праздники 2026 года. Все договорные сроки начислений считаются в рабочих днях по этому календарю.</div>` + T(DB.calendar, [{ key: 'date', label: 'Дата', val: r => fmtD(r.date) }, { key: 'work', label: 'Рабочий день', render: r => yesNo(r.work) }, { key: 'comment', label: 'Комментарий', val: r => r.comment }, { key: 'act', label: '', sortable: false, render: r => refRowBtns('calendar', r.date) }]); break;
     case 'params': body = T([DB.params], [{ key: 'tol', label: 'Допуск полной оплаты, USD', num: true, render: r => fmtUsd(r.payTolerance) }, { key: 'c', label: 'Комментарий', val: () => 'остаток к оплате не больше допуска считается полной оплатой; величину задаёт заказчик [Дополнить]' }]) + `<div style="margin-top:10px"><button class="btn sm" data-act="editTolerance">Изменить допуск</button></div>`; break;
     case 'lists': body = T(ARCH_LISTS.map(x => ({ n: x[0], v: x[1] })), [{ key: 'n', label: 'Список', val: r => r.n }, { key: 'v', label: 'Значения', val: r => r.v }]); break;
@@ -3821,8 +3925,8 @@ function formRule(c, rule) {
 function formDealTerms(d, withReason) {
   openForm({ title: (withReason ? 'Изменить условия сделки ' : 'Редактировать сделку ') + d.id, tag: withReason ? stage('mvp2', 'А38') : stage('mvp1'), wide: true,
     note: withReason ? CHANGE_NOTE : '<div class="note info">До заключения условия правятся свободно. Клиент и металл — ключевые поля: смена металла у сделки с контрактами перепроводит их.</div>',
-    fields: [{ name: 'clientId', label: 'Клиент', type: 'select', options: optClients(), value: d.clientId, required: true }, { name: 'metal', label: 'Металл', type: 'select', options: optMetals(), value: d.metal, required: true, readonly: dealContracts(d.id, true).length > 0 }, { name: 'saleForm', label: 'Форма продажи', type: 'select', options: opt(['с НДС', 'без НДС', 'экспорт']), value: d.saleForm }, { name: 'pickupLocId', label: 'Место забора (по умолчанию)', type: 'select', options: optLocs(), value: d.pickupLocId }, { name: 'exchangeQuote', label: 'Биржевая котировка, $/тр. унц.', type: 'number', step: '0.01', value: d.exchangeQuote, required: true }, { name: 'discount', label: 'Дисконт (−) / премия (+), %', type: 'number', step: '0.01', value: d.discount, required: true }, { name: 'rate', label: 'Курс ориентировочный', type: 'number', step: '0.0001', value: d.rate, required: true }, { name: 'carrierId', label: 'Спецперевозчик', type: 'select', options: optCarriers(), value: d.carrierId }, { name: 'logistics', label: 'Чья логистика', type: 'select', options: [{ value: 'buyer', label: LOGISTICS.buyer }, { value: 'our', label: LOGISTICS.our }], value: d.logistics }, { name: 'payTerms', label: 'Условия оплаты', type: 'select', options: opt(['полная предоплата', 'частичная предоплата', 'постоплата']), value: d.payTerms }, { name: 'consigneeId', label: 'Грузополучатель', type: 'select', options: optClients(), value: d.consigneeId }, { name: 'managerId', label: 'Ответственный менеджер', type: 'select', options: DB.users.map(u => ({ value: u.id, label: u.name })), value: d.managerId }, { name: 'combinedBar', label: 'Сборный слиток (остатки нескольких собственников)', type: 'select', options: [{ value: '', label: 'нет' }, { value: '1', label: 'да — единый фикс, N контрактов по долям, один АЗ, покупатель — банк' }], value: d.combinedBar ? '1' : '' }, { name: 'comment', label: 'Комментарий', type: 'textarea', value: d.comment || '', full: true }, ...(withReason ? [REASON_FIELD] : [])],
-    live: v => `<div class="lr"><span>Котировка сделки</span><b>${fmtNum(r2((v.exchangeQuote || 0) * (1 + (v.discount || 0) / 100)), 2)} $/тр. унц.</b></div><div class="lr"><span>Стоимость контрактов после пересчёта</span><b>${fmtUsd(r2(sum(dealContracts(d.id), c => r2((v.exchangeQuote || 0) * (1 + (v.discount || 0) / 100)) * c.mass / OZ)))}</b></div>`,
+    fields: [{ name: 'clientId', label: 'Клиент', type: 'select', options: optClients(), value: d.clientId, required: true }, { name: 'metal', label: 'Металл', type: 'select', options: optMetals(), value: d.metal, required: true, readonly: dealContracts(d.id, true).length > 0 }, { name: 'saleForm', label: 'Форма продажи', type: 'select', options: opt(['с НДС', 'без НДС', 'экспорт']), value: d.saleForm }, { name: 'priceBasis', label: 'База цены', type: 'select', options: Object.entries(PRICE_BASIS).map(([value, label]) => ({ value, label })), value: d.priceBasis || 'chem' }, { name: 'pickupLocId', label: 'Место забора (по умолчанию)', type: 'select', options: optLocs(), value: d.pickupLocId }, { name: 'exchangeQuote', label: 'Биржевая котировка, $/тр. унц.', type: 'number', step: '0.01', value: d.exchangeQuote, required: true }, { name: 'discount', label: 'Дисконт (−) / премия (+), %', type: 'number', step: '0.01', value: d.discount, required: true }, { name: 'rate', label: 'Курс ориентировочный', type: 'number', step: '0.0001', value: d.rate, required: true }, { name: 'carrierId', label: 'Спецперевозчик', type: 'select', options: optCarriers(), value: d.carrierId }, { name: 'logistics', label: 'Чья логистика', type: 'select', options: [{ value: 'buyer', label: LOGISTICS.buyer }, { value: 'our', label: LOGISTICS.our }], value: d.logistics }, { name: 'payTerms', label: 'Условия оплаты', type: 'select', options: opt(['полная предоплата', 'частичная предоплата', 'постоплата']), value: d.payTerms }, { name: 'consigneeId', label: 'Грузополучатель', type: 'select', options: optClients(), value: d.consigneeId }, { name: 'managerId', label: 'Ответственный менеджер', type: 'select', options: DB.users.map(u => ({ value: u.id, label: u.name })), value: d.managerId }, { name: 'combinedBar', label: 'Сборный слиток (остатки нескольких собственников)', type: 'select', options: [{ value: '', label: 'нет' }, { value: '1', label: 'да — единый фикс, N контрактов по долям, один АЗ, покупатель — банк' }], value: d.combinedBar ? '1' : '' }, { name: 'comment', label: 'Комментарий', type: 'textarea', value: d.comment || '', full: true }, ...(withReason ? [REASON_FIELD] : [])],
+    live: v => `<div class="lr"><span>Котировка сделки</span><b>${fmtNum(r2((v.exchangeQuote || 0) * (1 + (v.discount || 0) / 100)), 2)} $/тр. унц.</b></div><div class="lr"><span>Стоимость контрактов после пересчёта</span><b>${fmtUsd(r2(sum(dealContracts(d.id), c => r2((v.exchangeQuote || 0) * (1 + (v.discount || 0) / 100)) * (v.priceBasis === 'lig' ? contractLig(c) : c.mass) / OZ)))}</b></div>`,
     submit: v => { const { reason, ...data } = v; data.combinedBar = data.combinedBar === '1'; editDealTerms(d, data, withReason ? reason : null); toast('Условия сделки сохранены', 'ok'); } });
 }
 function formEditContract(c) {
@@ -3834,7 +3938,7 @@ function formChangeContractFull(c) { // расширенный «Изменит�
   const d = deal(c.dealId);
   openForm({ title: `Изменить контракт ${c.id}`, tag: stage('mvp2', 'А38'), note: CHANGE_NOTE + '<div class="note info small">При проверке остатка учитывается собственное списание контракта — ложной нехватки не возникает; при смене счёта пересчитываются старый и новый (А12).</div>', wide: true,
     fields: [{ name: 'assetId', label: 'Продавец (собственник)', type: 'select', options: optAssets(), value: c.assetId }, { name: 'pickupLocId', label: 'Место забора', type: 'select', options: optLocs(), value: c.pickupLocId }, { name: 'date', label: 'Дата контракта', type: 'date', value: c.date, required: true, max: DB.today }, { name: 'mass', label: 'Масса итоговая, г', type: 'number', step: '0.1', value: c.mass, required: true }, { name: 'ligMass', label: 'Лигатурная масса, г', type: 'number', step: '0.1', value: c.ligMass }, { name: 'fineness', label: 'Проба, %', type: 'number', step: '0.01', value: c.fineness }, REASON_FIELD],
-    live: v => { const acc = findAccountByLoc(v.assetId, v.pickupLocId, d.metal); const own = acc && acc.id === c.accountId ? c.mass : 0; const avail = acc ? r1(acc.balance + own) : null; return `<div class="lr"><span>Счёт-источник</span><b>${acc ? esc(accountName(acc)) + ': доступно ' + fmtKg(avail) : '<span class="neg">счёта нет — будет заблокировано</span>'}</b></div>${acc ? `<div class="lr"><span>Остаток после изменения</span><b class="${avail - v.mass < 0 ? 'neg' : ''}">${fmtKg(r1(avail - v.mass))}${avail - v.mass < 0 ? ' — будет заблокировано' : ''}</b></div>` : ''}<div class="lr"><span>Новая стоимость</span><b>${fmtUsd(r2(c.quote * (v.mass || 0) / OZ))}</b></div>`; },
+    live: v => { const acc = findAccountByLoc(v.assetId, v.pickupLocId, d.metal, v.assetId === c.assetId ? !!c.vat : false); const own = acc && acc.id === c.accountId ? c.mass : 0; const avail = acc ? r1(acc.balance + own) : null; return `<div class="lr"><span>Счёт-источник</span><b>${acc ? esc(accountName(acc)) + ': доступно ' + fmtKg(avail) : '<span class="neg">счёта нет — будет заблокировано</span>'}</b></div>${acc ? `<div class="lr"><span>Остаток после изменения</span><b class="${avail - v.mass < 0 ? 'neg' : ''}">${fmtKg(r1(avail - v.mass))}${avail - v.mass < 0 ? ' — будет заблокировано' : ''}</b></div>` : ''}<div class="lr"><span>Новая стоимость</span><b>${fmtUsd(r2(c.quote * (v.mass || 0) / OZ))}</b></div>`; },
     submit: v => { const { reason, ...data } = v; const w = changeSalesContract(c, data, reason); c.groupId = asset(c.assetId).groupId; refreshDealStatus(d); toast('Контракт изменён и перепроведён', 'ok'); w.forEach(x => toast(x, 'warn', 9000)); } });
 }
 function formEditPayment(p) {
@@ -3865,8 +3969,7 @@ function askDelete(kind, id, after) {
 /* ---------- справочники: поля и формы ---------- */
 const REF_FIELDS = {
   groups: () => [{ name: 'name', label: 'Название', type: 'text', required: true }, { name: 'origins', label: 'Происхождение металла', type: 'select', options: [{ value: '', label: 'не ведётся — равно собственнику (АР)' }, { value: '1', label: 'ведётся: источники внутри собственника (ПМ)' }], hint: 'если не ведётся, в партиях и контрактах подставляется собственный металл собственника' }],
-  sources: () => [{ name: 'assetId', label: 'Собственник', type: 'select', options: DB.assets.filter(a => usesOrigins(a.id)).map(a => ({ value: a.id, label: a.name })), required: true }, { name: 'code', label: 'Код', type: 'text', required: true, hint: 'как в спецификации, например П-003' }, { name: 'name', label: 'Название', type: 'text', required: true }, { name: 'kind', label: 'Вид', type: 'select', options: [{ value: 'purchased', label: 'покупное сырьё' }, { value: 'own', label: 'собственный металл' }], required: true }, { name: 'supplier', label: 'У кого куплено', type: 'text', hint: 'для покупного сырья: контрагент-поставщик (как в to-be ПМ: «Покупка у КПМ»)' }],
-  assets: () => [{ name: 'name', label: 'Название', type: 'text', required: true }, { name: 'legal', label: 'Юрлицо, реквизиты', type: 'text' }, { name: 'groupId', label: 'Группа собственников', type: 'select', options: DB.groups.map(g => ({ value: g.id, label: g.name })), required: true }, { name: 'external', label: 'Внешний собственник', type: 'select', options: [{ value: '', label: 'нет — актив группы' }, { value: '1', label: 'да — сторонний собственник вне группы (металл возвращается ему)' }], hint: 'внешний собственник заводится как актив, чтобы его партия, договор переработки и счёт учитывались тем же шаблоном; продажи по нему не ведутся' }, { name: 'address', label: 'Адрес площадки (при создании создаётся локация)', type: 'text' }],
+  assets: () => [{ name: 'name', label: 'Название', type: 'text', required: true }, { name: 'legal', label: 'Юрлицо, реквизиты', type: 'text' }, { name: 'external', label: 'Контур', type: 'select', options: [{ value: '', label: 'внутренний — актив группы' }, { value: '1', label: 'внешний — сторонняя компания' }], hint: 'внешняя компания не продаёт металл; может быть собственником партии (металл перерабатываем и возвращаем) или происхождением' }, { name: 'groupId', label: 'Группа собственников', type: 'select', options: [{ value: '', label: '— без группы (видна всем) —' }, ...DB.groups.map(g => ({ value: g.id, label: g.name }))], hint: 'обязательна для внутреннего контура; у внешней компании — только если мы перерабатываем её металл' }, { name: 'address', label: 'Адрес площадки (при создании создаётся локация)', type: 'text' }],
   processors: () => [{ name: 'name', label: 'Название', type: 'text', required: true }, { name: 'shortName', label: 'Короткое имя локации', type: 'text', hint: 'например, «Уральский АЗ»' }, { name: 'type', label: 'Тип переработчика', type: 'select', options: [{ value: 'refinery', label: 'аффинажный завод (финальный)' }, { value: 'intermediate', label: 'промежуточный переработчик' }], required: true }, { name: 'outputProductId', label: 'Тип выходного продукта по умолчанию', type: 'select', options: DB.productTypes.map(p => ({ value: p.id, label: p.name })), required: true }, { name: 'address', label: 'Адрес', type: 'text' }],
   carriers: () => [{ name: 'name', label: 'Название', type: 'text', required: true }, { name: 'kind', label: 'Тип перевозчика', type: 'select', options: [{ value: 'special', label: 'спецперевозчик (Доре, цементат, готовая продукция)' }, { value: 'regular', label: 'обычный перевозчик (только концентрат: ЖД/водный)' }], required: true }, { name: 'accreditation', label: 'Данные аккредитации', type: 'text' }, { name: 'hasWarehouse', label: 'Есть склад хранения (создать локацию)', type: 'select', options: [{ value: '', label: 'нет' }, { value: '1', label: 'да' }] }, { name: 'address', label: 'Адрес склада', type: 'text' }],
   locations: () => [{ name: 'name', label: 'Название', type: 'text', required: true }, { name: 'type', label: 'Тип', type: 'select', options: Object.entries(ACC_TYPE).map(([k, v]) => ({ value: k, label: v })), required: true }, { name: 'ownerAsset', label: 'Владелец: собственник', type: 'select', options: [{ value: '', label: '—' }, ...optAssets()] }, { name: 'ownerProc', label: 'Владелец: переработчик', type: 'select', options: [{ value: '', label: '—' }, ...optProcs()] }, { name: 'ownerCarrier', label: 'Владелец: спецперевозчик', type: 'select', options: [{ value: '', label: '—' }, ...optCarriers()] }, { name: 'address', label: 'Адрес', type: 'text' }],
@@ -3877,7 +3980,7 @@ const REF_FIELDS = {
   arbThresholds: () => [{ name: 'value', label: 'Допустимое расхождение, п.п.', type: 'number', step: '0.01', required: true }],
   calendar: () => [{ name: 'date', label: 'Дата', type: 'date', required: true }, { name: 'work', label: 'Рабочий день', type: 'select', options: [{ value: '0', label: 'нет (выходной/праздник)' }, { value: '1', label: 'да (перенос)' }], required: true }, { name: 'comment', label: 'Комментарий', type: 'text' }],
 };
-const REF_LABEL = { sources: 'происхождение металла', groups: 'группу собственников', assets: 'собственник', processors: 'переработчика', carriers: 'спецперевозчика', locations: 'локацию', clients: 'клиента', productTypes: 'тип продукции', users: 'пользователя', deliveryTerms: 'срок доставки', arbThresholds: 'порог арбитража', calendar: 'день календаря' };
+const REF_LABEL = { groups: 'группу собственников', assets: 'компанию', processors: 'переработчика', carriers: 'спецперевозчика', locations: 'локацию', clients: 'клиента', productTypes: 'тип продукции', users: 'пользователя', deliveryTerms: 'срок доставки', arbThresholds: 'порог арбитража', calendar: 'день календаря' };
 function refForm(coll, id) {
   const rec = id ? (coll === 'calendar' ? DB.calendar.find(c => c.date === id) : coll === 'arbThresholds' ? DB.arbThresholds.find(t => t.metal === id) : byId(coll, id)) : null;
   const fields = REF_FIELDS[coll]().map(f => ({ ...f, value: rec ? (f.name === 'work' ? (rec.work ? '1' : '0') : f.name === 'hasWarehouse' ? (rec.warehouseLocId ? '1' : '') : f.name === 'origins' ? (rec.origins ? '1' : '') : f.name === 'external' ? (rec.external ? '1' : '') : rec[f.name]) : f.value }));
@@ -3890,8 +3993,7 @@ function refForm(coll, id) {
       else if (coll === 'users') { const roleName = { manager: 'Менеджер', head: 'Руководитель', finance: 'Финансовый контролёр', admin: 'Администратор' }[v.role]; refSave(coll, { name: v.name, role: v.role, roleName, groupId: v.groupId || null, companyLevel: !v.groupId }, id); }
       else if (coll === 'productTypes') { refSave(coll, { name: v.name, stage: v.stage, metals: ['Au', 'Ag'] }, id); }
       else if (coll === 'groups') { refSave(coll, { name: v.name, origins: v.origins === '1' }, id); }
-      else if (coll === 'assets') { refSave(coll, { ...v, external: v.external === '1' }, id); }
-      else if (coll === 'sources') { if (v.kind === 'own' && DB.sources.some(x => x.assetId === v.assetId && x.kind === 'own' && x.id !== id)) throw new Error('У собственника уже есть источник «собственный металл».'); refSave(coll, v, id); }
+      else if (coll === 'assets') { const ext = v.external === '1'; if (!ext && !v.groupId) throw new Error('Для компании внутреннего контура укажите группу собственников.'); if (id && !v.groupId && (DB.lots.some(l => l.assetId === id) || DB.accounts.some(a => a.assetId === id))) throw new Error('У компании есть партии или счета — группу убрать нельзя.'); refSave(coll, { ...v, groupId: v.groupId || null, external: ext }, id); }
       else if (coll === 'carriers') { refSave(coll, { name: v.name, kind: v.kind, accreditation: v.accreditation, hasWarehouse: v.hasWarehouse === '1', address: v.address }, id); }
       else if (coll === 'processors') { refSave(coll, v, id); if (rec && rec.locId) { const l = locById(rec.locId); if (l && v.shortName) l.name = v.shortName; } }
       else refSave(coll, v, id);
@@ -4327,8 +4429,7 @@ const LOT_METAL_FIELDS = () => [].concat(...['Au', 'Ag'].map(m => [
 const ARCH_TABLES = [
   /* ---------- справочники ---------- */
   { key: 'groups', name: 'Группы собственников', sec: 'refs', stage: 'mvp1', desc: 'Дивизионы: границы видимости для менеджеров; признак, ведётся ли происхождение металла внутри собственника.', fields: [{ k: 'id', l: 'Код', t: 'id', key: true }, { k: 'name', l: 'Название', t: 'str', key: true }, { k: 'origins', l: 'Происхождение ведётся', t: 'bool', key: true }] },
-  { key: 'sources', name: 'Происхождение металла', sec: 'refs', stage: 'mvp1', desc: 'Источники металла внутри собственника (ПМ): своя руда, покупное сырьё, хвосты. У АР — один источник, равный собственнику, подставляется автоматически.', fields: [{ k: 'id', l: 'Код', t: 'id', key: true }, { k: 'assetId', l: 'Собственник', t: 'ref', ref: 'assets', key: true }, { k: 'code', l: 'Код в спецификации', t: 'str', key: true }, { k: 'name', l: 'Название', t: 'str', key: true }, { k: 'kind', l: 'Вид', t: 'enum', vals: 'own · purchased', key: true }] },
-  { key: 'assets', name: 'Собственники (ГОКи)', sec: 'refs', stage: 'mvp1', desc: 'Собственники металла — продавцы в контрактах, владельцы счетов и лимитов.', fields: [{ k: 'id', l: 'Код', t: 'id', key: true }, { k: 'name', l: 'Название', t: 'str', key: true }, { k: 'legal', l: 'Юрлицо, ИНН', t: 'str' }, { k: 'groupId', l: 'Группа собственников', t: 'ref', ref: 'groups', key: true }, { k: 'external', l: 'Внешний собственник (вне группы)', t: 'bool' }] },
+  { key: 'assets', name: 'Компании', sec: 'refs', stage: 'mvp1', desc: 'Один справочник компаний: активы группы (внутренний контур — владеют металлом и продают) и сторонние компании (внешний контур — владельцы металла на переработке или происхождение покупного сырья). Отдельного справочника происхождений нет.', fields: [{ k: 'id', l: 'Код', t: 'id', key: true }, { k: 'name', l: 'Название', t: 'str', key: true }, { k: 'legal', l: 'Юрлицо, ИНН', t: 'str' }, { k: 'external', l: 'Контур', t: 'enum', vals: 'внутренний · внешний', key: true }, { k: 'groupId', l: 'Группа собственников (обязательна для внутреннего контура)', t: 'ref', ref: 'groups' }] },
   { key: 'processors', name: 'Переработчики', sec: 'refs', stage: 'mvp1', desc: 'Аффинажные заводы и промежуточные переработчики.', fields: [{ k: 'id', l: 'Код', t: 'id', key: true }, { k: 'name', l: 'Название', t: 'str', key: true }, { k: 'type', l: 'Тип', t: 'enum', vals: 'refinery · intermediate', key: true }, { k: 'outputProductId', l: 'Выходной продукт', t: 'ref', ref: 'productTypes' }, { k: 'locId', l: 'Локация (площадка)', t: 'ref', ref: 'locations' }] },
   { key: 'carriers', name: 'Перевозчики', sec: 'refs', stage: 'mvp1', desc: 'Спецперевозчики (доре, цементат, слитки) и обычные перевозчики (только концентрат).', fields: [{ k: 'id', l: 'Код', t: 'id', key: true }, { k: 'name', l: 'Название', t: 'str', key: true }, { k: 'kind', l: 'Вид', t: 'enum', vals: 'special · regular', key: true }, { k: 'accreditation', l: 'Свидетельство / аккредитация', t: 'str' }, { k: 'warehouseLocId', l: 'Склад перевозчика', t: 'ref', ref: 'locations' }] },
   { key: 'locations', name: 'Локации', sec: 'refs', stage: 'mvp1', desc: 'Места хранения металла: площадки собственников, заводы, склады перевозчиков. Ключ аффинажного счёта.', fields: [{ k: 'id', l: 'Код', t: 'id', key: true }, { k: 'name', l: 'Название', t: 'str', key: true }, { k: 'type', l: 'Тип', t: 'enum', vals: 'asset · processor · carrier', key: true }, { k: 'ownerAsset', l: 'Собственник-владелец', t: 'ref', ref: 'assets' }, { k: 'ownerProc', l: 'Переработчик-владелец', t: 'ref', ref: 'processors' }, { k: 'ownerCarrier', l: 'Перевозчик-владелец', t: 'ref', ref: 'carriers' }, { k: 'address', l: 'Адрес', t: 'str' }] },
@@ -4347,19 +4448,19 @@ const ARCH_TABLES = [
   { key: 'conditions', name: 'Условия переработки', sec: 'proc', stage: 'mvp1', desc: 'Категории сырья по диапазонам концентраций: извлечение и тариф по каждому металлу.', fields: [{ k: 'id', l: 'Номер', t: 'id', key: true }, { k: 'contractId', l: 'Договор переработки', t: 'ref', ref: 'procContracts', key: true }, { k: 'name', l: 'Название категории', t: 'str', key: true }, { k: 'order', l: 'Порядок проверки', t: 'num' }, { k: 'Au_from', l: 'Au от, %', t: 'pct', key: true }, { k: 'Au_to', l: 'Au до, %', t: 'pct' }, { k: 'Ag_from', l: 'Ag от, %', t: 'pct' }, { k: 'Ag_to', l: 'Ag до, %', t: 'pct' }, { k: 'Au_extr', l: 'Извлечение Au, %', t: 'pct', key: true }, { k: 'Ag_extr', l: 'Извлечение Ag, %', t: 'pct' }, { k: 'Au_tariff', l: 'Тариф Au, ₽/г', t: 'money' }, { k: 'Ag_tariff', l: 'Тариф Ag, ₽/г', t: 'money' }] },
   { key: 'rules', name: 'Правила начислений', sec: 'proc', stage: 'mvp1', desc: 'График начисления металла на счёт: доля и срок (р.д.) после приёмки в переработку; ровно одно финальное правило на металл.', fields: [{ k: 'id', l: 'Номер', t: 'id', key: true }, { k: 'contractId', l: 'Договор переработки', t: 'ref', ref: 'procContracts', key: true }, { k: 'metal', l: 'Металл', t: 'ref', ref: 'metals', key: true }, { k: 'type', l: 'Тип', t: 'enum', vals: 'prelim · final', key: true }, { k: 'seq', l: 'Очерёдность', t: 'num' }, { k: 'days', l: 'Срок, р.д.', t: 'num', key: true }, { k: 'share', l: 'Доля, %', t: 'pct', key: true }] },
   { key: 'shipments', name: 'Отгрузки МПФ', sec: 'proc', stage: 'mvp1', desc: 'Физическая отправка сырья (или с промежуточного передела) переработчику. Собственника у отгрузки нет — он задаётся в каждой партии; в одной отгрузке могут быть партии разных собственников и несколько спецификаций.', fields: [{ k: 'id', l: 'Номер', t: 'id', key: true }, { k: 'status', l: 'Статус', t: 'enum', vals: 'Планируется · Отправлена · Прибыла · В переработке · Завершена переработка · Отмена отправки', key: true }, { k: 'groupId', l: 'Группа собственников (от отправителя)', t: 'ref', ref: 'groups' }, { k: 'fromLocId', l: 'Откуда', t: 'ref', ref: 'locations', key: true }, { k: 'procId', l: 'Переработчик', t: 'ref', ref: 'processors', key: true }, { k: 'productId', l: 'Тип продукции', t: 'ref', ref: 'productTypes', key: true }, { k: 'outputProductId', l: 'Выходной продукт', t: 'ref', ref: 'productTypes' }, { k: 'carrierId', l: 'Перевозчик', t: 'ref', ref: 'carriers' }, { k: 'sentPlan', l: 'Отправка план', t: 'date' }, { k: 'sentFact', l: 'Отправка факт', t: 'date', key: true }, { k: 'arrPlan', l: 'Прибытие план', t: 'date' }, { k: 'arrFact', l: 'Прибытие факт', t: 'date' }, { k: 'acceptPlan', l: 'Приёмка в переработку план', t: 'date' }, { k: 'acceptFact', l: 'Приёмка факт', t: 'date', key: true }, { k: 'endPlan', l: 'Завершение переработки план', t: 'date' }, { k: 'endFact', l: 'Завершение факт', t: 'date' }, { k: 'docs', l: 'Документы', t: 'list' }, { k: 'managerId', l: 'Ответственный', t: 'ref', ref: 'users' }, { k: 'cancelReason', l: 'Причина отмены', t: 'text' }, { k: 'groupId', l: 'Группа (вычисл.)', t: 'ref', ref: 'groups' }] },
-  { key: 'lots', name: 'Партии', sec: 'proc', stage: 'mvp1', desc: 'Единица учёта внутри отгрузки: спецификация × собственник. Своя химия (наша, переработчика, арбитраж, итог), плановый и итоговый выход, свой договор переработки. Спецификация на нескольких собственников = несколько партий с одинаковыми реквизитами и долями в %.', fields: [{ k: 'id', l: 'Номер (отгрузка/№)', t: 'id', key: true }, { k: 'shipmentId', l: 'Отгрузка', t: 'ref', ref: 'shipments', key: true }, { k: 'assetId', l: 'Собственник партии', t: 'ref', ref: 'assets', key: true }, { k: 'specNo', l: '№ спецификации (документ ГОКа)', t: 'str', key: true }, { k: 'shareAu', l: 'Доля собственника в спецификации Au, %', t: 'num' }, { k: 'shareAg', l: 'Доля собственника в спецификации Ag, %', t: 'num' }, { k: 'sourceId', l: 'Происхождение металла', t: 'ref', ref: 'sources', key: true }, { k: 'status', l: 'Статус', t: 'enum', vals: 'как у отгрузки', key: true }, { k: 'ligMass', l: 'Лигатурная масса, г', t: 'num', key: true }, { k: 'procContractId', l: 'Договор переработки (по собственнику партии, фиксируется при приёмке)', t: 'ref', ref: 'procContracts', key: true }, { k: 'condPlanId', l: 'Условие (план, по нашей химии)', t: 'ref', ref: 'conditions', key: true }, { k: 'condFinalId', l: 'Условие (итог)', t: 'ref', ref: 'conditions' }, { k: 'finalConfirmed', l: 'Итог подтверждён', t: 'bool', key: true }, { k: 'finalSource', l: 'Источник итога', t: 'enum', vals: 'our · proc · arb' }, { k: 'arbitrationRequired', l: 'Требуется арбитраж', t: 'bool' }, { k: 'processingCost', l: 'Стоимость переработки, ₽', t: 'money' }, { k: 'endPlan', l: 'Завершение план', t: 'date' }, { k: 'endFact', l: 'Завершение факт', t: 'date' }, { k: 'specOur', l: 'Наша спецификация', t: 'file' }, { k: 'specProc', l: 'Спецификация приёмки', t: 'file' }, { k: 'specArb', l: 'Заключение арбитража', t: 'file' }, { k: 'docs', l: 'Документы по партии', t: 'list' }, { k: 'confirmedBy', l: 'Кто подтвердил итог', t: 'ref', ref: 'users' }, { k: 'confirmedAt', l: 'Когда подтверждён', t: 'date' }, ...LOT_METAL_FIELDS(), { k: 'outputProductId', l: 'Выходной продукт', t: 'ref', ref: 'productTypes' }, { k: 'groupId', l: 'Группа (вычисл.)', t: 'ref', ref: 'groups' }] },
-  { key: 'accruals', name: 'Начисления', sec: 'proc', stage: 'mvp1', desc: 'Плановые и фактические начисления металла на аффинажный счёт по партии и правилу; исполненное начисление порождает транзакцию.', fields: [{ k: 'id', l: 'Номер', t: 'id', key: true }, { k: 'lotId', l: 'Партия', t: 'ref', ref: 'lots', key: true }, { k: 'shipmentId', l: 'Отгрузка', t: 'ref', ref: 'shipments' }, { k: 'metal', l: 'Металл', t: 'ref', ref: 'metals', key: true }, { k: 'type', l: 'Тип', t: 'enum', vals: 'prelim · final', key: true }, { k: 'seq', l: 'Очерёдность', t: 'num' }, { k: 'ruleId', l: 'Правило', t: 'ref', ref: 'rules' }, { k: 'accountId', l: 'Аффинажный счёт', t: 'ref', ref: 'accounts', key: true }, { k: 'planDate', l: 'Дата план', t: 'date', key: true }, { k: 'planMass', l: 'Масса план, г', t: 'num', key: true }, { k: 'calcMass', l: 'Расчётная масса (итог − предв.), г', t: 'num' }, { k: 'factDate', l: 'Дата факт', t: 'date' }, { k: 'factMass', l: 'Масса факт, г', t: 'num', key: true }, { k: 'status', l: 'Статус', t: 'enum', vals: 'Планируется · Ждёт итоговых показателей · Исполнено · Отменено', key: true }, { k: 'assetId', l: 'Собственник', t: 'ref', ref: 'assets' }, { k: 'procId', l: 'Переработчик', t: 'ref', ref: 'processors' }, { k: 'comment', l: 'Комментарий', t: 'text' }, { k: 'sourceId', l: 'Происхождение металла', t: 'ref', ref: 'sources' }] },
+  { key: 'lots', name: 'Партии', sec: 'proc', stage: 'mvp1', desc: 'Единица учёта внутри отгрузки: спецификация × собственник. Своя химия (наша, переработчика, арбитраж, итог), плановый и итоговый выход, свой договор переработки. Спецификация на нескольких собственников = несколько партий с одинаковыми реквизитами и долями в %.', fields: [{ k: 'id', l: 'Номер (отгрузка/№)', t: 'id', key: true }, { k: 'shipmentId', l: 'Отгрузка', t: 'ref', ref: 'shipments', key: true }, { k: 'assetId', l: 'Собственник партии', t: 'ref', ref: 'assets', key: true }, { k: 'specNo', l: '№ спецификации (документ ГОКа)', t: 'str', key: true }, { k: 'shareAu', l: 'Доля собственника в спецификации Au, %', t: 'num' }, { k: 'shareAg', l: 'Доля собственника в спецификации Ag, %', t: 'num' }, { k: 'sourceId', l: 'Происхождение (компания; по умолчанию собственник)', t: 'ref', ref: 'assets', key: true }, { k: 'status', l: 'Статус', t: 'enum', vals: 'как у отгрузки', key: true }, { k: 'ligMass', l: 'Лигатурная масса, г', t: 'num', key: true }, { k: 'procContractId', l: 'Договор переработки (по собственнику партии, фиксируется при приёмке)', t: 'ref', ref: 'procContracts', key: true }, { k: 'condPlanId', l: 'Условие (план, по нашей химии)', t: 'ref', ref: 'conditions', key: true }, { k: 'condFinalId', l: 'Условие (итог)', t: 'ref', ref: 'conditions' }, { k: 'finalConfirmed', l: 'Итог подтверждён', t: 'bool', key: true }, { k: 'finalSource', l: 'Источник итога', t: 'enum', vals: 'our · proc · arb' }, { k: 'arbitrationRequired', l: 'Требуется арбитраж', t: 'bool' }, { k: 'processingCost', l: 'Стоимость переработки, ₽', t: 'money' }, { k: 'endPlan', l: 'Завершение план', t: 'date' }, { k: 'endFact', l: 'Завершение факт', t: 'date' }, { k: 'specOur', l: 'Наша спецификация', t: 'file' }, { k: 'specProc', l: 'Спецификация приёмки', t: 'file' }, { k: 'specArb', l: 'Заключение арбитража', t: 'file' }, { k: 'docs', l: 'Документы по партии', t: 'list' }, { k: 'confirmedBy', l: 'Кто подтвердил итог', t: 'ref', ref: 'users' }, { k: 'confirmedAt', l: 'Когда подтверждён', t: 'date' }, ...LOT_METAL_FIELDS(), { k: 'outputProductId', l: 'Выходной продукт', t: 'ref', ref: 'productTypes' }, { k: 'groupId', l: 'Группа (вычисл.)', t: 'ref', ref: 'groups' }] },
+  { key: 'accruals', name: 'Начисления', sec: 'proc', stage: 'mvp1', desc: 'Плановые и фактические начисления металла на аффинажный счёт по партии и правилу; исполненное начисление порождает транзакцию.', fields: [{ k: 'id', l: 'Номер', t: 'id', key: true }, { k: 'lotId', l: 'Партия', t: 'ref', ref: 'lots', key: true }, { k: 'shipmentId', l: 'Отгрузка', t: 'ref', ref: 'shipments' }, { k: 'metal', l: 'Металл', t: 'ref', ref: 'metals', key: true }, { k: 'type', l: 'Тип', t: 'enum', vals: 'prelim · final', key: true }, { k: 'seq', l: 'Очерёдность', t: 'num' }, { k: 'ruleId', l: 'Правило', t: 'ref', ref: 'rules' }, { k: 'accountId', l: 'Аффинажный счёт', t: 'ref', ref: 'accounts', key: true }, { k: 'planDate', l: 'Дата план', t: 'date', key: true }, { k: 'planMass', l: 'Масса план, г', t: 'num', key: true }, { k: 'calcMass', l: 'Расчётная масса (итог − предв.), г', t: 'num' }, { k: 'factDate', l: 'Дата факт', t: 'date' }, { k: 'factMass', l: 'Масса факт, г', t: 'num', key: true }, { k: 'status', l: 'Статус', t: 'enum', vals: 'Планируется · Ждёт итоговых показателей · Исполнено · Отменено', key: true }, { k: 'assetId', l: 'Собственник', t: 'ref', ref: 'assets' }, { k: 'procId', l: 'Переработчик', t: 'ref', ref: 'processors' }, { k: 'comment', l: 'Комментарий', t: 'text' }, { k: 'sourceId', l: 'Происхождение (компания; по умолчанию собственник)', t: 'ref', ref: 'assets' }] },
 
   /* ---------- реализация ---------- */
-  { key: 'deals', name: 'Сделки', sec: 'sales', stage: 'mvp1', desc: 'Коммерческие условия продажи одному покупателю: котировка, дисконт, курс, логистика, оплата. Агрегирует контракты продажи.', fields: [{ k: 'id', l: 'Номер', t: 'id', key: true }, { k: 'status', l: 'Статус', t: 'enum', vals: 'Предварительная · Исполняется · Завершена · Отменена', key: true }, { k: 'clientId', l: 'Покупатель', t: 'ref', ref: 'clients', key: true }, { k: 'metal', l: 'Металл', t: 'ref', ref: 'metals', key: true }, { k: 'saleForm', l: 'Форма продажи', t: 'enum', vals: 'с НДС · без НДС · экспорт' }, { k: 'currency', l: 'Валюта', t: 'enum', vals: 'RUB · USD · EUR' }, { k: 'exchangeQuote', l: 'Биржевая котировка, $/oz', t: 'money', key: true }, { k: 'discount', l: 'Дисконт/премия, %', t: 'pct' }, { k: 'quote', l: 'Котировка сделки, $/oz', t: 'money', key: true }, { k: 'rate', l: 'Курс ₽/$', t: 'num' }, { k: 'pickupLocId', l: 'Место отгрузки', t: 'ref', ref: 'locations', key: true }, { k: 'carrierId', l: 'Перевозчик', t: 'ref', ref: 'carriers' }, { k: 'logistics', l: 'Чья логистика', t: 'enum', vals: 'our · buyer' }, { k: 'consigneeId', l: 'Грузополучатель', t: 'ref', ref: 'clients' }, { k: 'payTerms', l: 'Условия оплаты', t: 'enum', vals: 'полная предоплата · частичная · постоплата' }, { k: 'combinedBar', l: 'Сборный слиток', t: 'bool' }, { k: 'concludedDate', l: 'Дата заключения', t: 'date', key: true }, { k: 'completedDate', l: 'Дата завершения', t: 'date' }, { k: 'managerId', l: 'Менеджер', t: 'ref', ref: 'users' }, { k: 'groupIds', l: 'Группы собственников (вычисл.)', t: 'list', ref: 'groups' }, { k: 'cancelReason', l: 'Причина отмены', t: 'text' }, { k: 'comment', l: 'Комментарий', t: 'text' }] },
-  { key: 'salesContracts', name: 'Контракты продажи', sec: 'sales', stage: 'mvp1', desc: 'Продажа металла одного собственника в рамках сделки: списывает металл со счёта и расходует лимит в момент создания.', fields: [{ k: 'id', l: 'Номер', t: 'id', key: true }, { k: 'dealId', l: 'Сделка', t: 'ref', ref: 'deals', key: true }, { k: 'status', l: 'Статус', t: 'enum', vals: 'Заключён · Передан · Получен · Завершена · Отменена', key: true }, { k: 'assetId', l: 'Собственник-продавец', t: 'ref', ref: 'assets', key: true }, { k: 'accountId', l: 'Счёт-источник', t: 'ref', ref: 'accounts', key: true }, { k: 'limitId', l: 'Лимит (расход)', t: 'ref', ref: 'limits', key: true }, { k: 'procContractId', l: 'Договор переработки (происхождение)', t: 'ref', ref: 'procContracts' }, { k: 'date', l: 'Дата контракта', t: 'date', key: true }, { k: 'mass', l: 'Масса ХЧ, г', t: 'num', key: true }, { k: 'ligMass', l: 'Лигатурная масса, г', t: 'num' }, { k: 'fineness', l: 'Проба', t: 'num' }, { k: 'quote', l: 'Котировка, $/oz', t: 'money' }, { k: 'exchangeQuote', l: 'Биржевая котировка', t: 'money' }, { k: 'discount', l: 'Дисконт, %', t: 'pct' }, { k: 'rate', l: 'Курс ₽/$', t: 'num' }, { k: 'pickupLocId', l: 'Место отгрузки', t: 'ref', ref: 'locations' }, { k: 'carrierId', l: 'Перевозчик', t: 'ref', ref: 'carriers' }, { k: 'logistics', l: 'Чья логистика', t: 'enum' }, { k: 'consigneeId', l: 'Грузополучатель', t: 'ref', ref: 'clients' }, { k: 'payTerms', l: 'Условия оплаты', t: 'enum' }, { k: 'transferDate', l: 'Передано перевозчику', t: 'date' }, { k: 'receivedDate', l: 'Получено покупателем', t: 'date' }, { k: 'giisReported', l: 'Отчёт в ГИИС подан', t: 'date' }, { k: 'cancelReason', l: 'Причина отмены', t: 'text' }, { k: 'groupId', l: 'Группа (вычисл.)', t: 'ref', ref: 'groups' }, { k: 'sourceId', l: 'Происхождение металла', t: 'ref', ref: 'sources' }] },
+  { key: 'deals', name: 'Сделки', sec: 'sales', stage: 'mvp1', desc: 'Коммерческие условия продажи одному покупателю: котировка, дисконт, курс, логистика, оплата. Агрегирует контракты продажи.', fields: [{ k: 'id', l: 'Номер', t: 'id', key: true }, { k: 'status', l: 'Статус', t: 'enum', vals: 'Предварительная · Исполняется · Завершена · Отменена', key: true }, { k: 'clientId', l: 'Покупатель', t: 'ref', ref: 'clients', key: true }, { k: 'metal', l: 'Металл', t: 'ref', ref: 'metals', key: true }, { k: 'saleForm', l: 'Форма продажи', t: 'enum', vals: 'с НДС · без НДС · экспорт' }, { k: 'priceBasis', l: 'База цены', t: 'enum', vals: 'за грамм ХЧ · за грамм лигатуры', key: true }, { k: 'currency', l: 'Валюта', t: 'enum', vals: 'RUB · USD · EUR' }, { k: 'exchangeQuote', l: 'Биржевая котировка, $/oz', t: 'money', key: true }, { k: 'discount', l: 'Дисконт/премия, %', t: 'pct' }, { k: 'quote', l: 'Котировка сделки, $/oz', t: 'money', key: true }, { k: 'rate', l: 'Курс ₽/$', t: 'num' }, { k: 'pickupLocId', l: 'Место отгрузки', t: 'ref', ref: 'locations', key: true }, { k: 'carrierId', l: 'Перевозчик', t: 'ref', ref: 'carriers' }, { k: 'logistics', l: 'Чья логистика', t: 'enum', vals: 'our · buyer' }, { k: 'consigneeId', l: 'Грузополучатель', t: 'ref', ref: 'clients' }, { k: 'payTerms', l: 'Условия оплаты', t: 'enum', vals: 'полная предоплата · частичная · постоплата' }, { k: 'combinedBar', l: 'Сборный слиток', t: 'bool' }, { k: 'concludedDate', l: 'Дата заключения', t: 'date', key: true }, { k: 'completedDate', l: 'Дата завершения', t: 'date' }, { k: 'managerId', l: 'Менеджер', t: 'ref', ref: 'users' }, { k: 'groupIds', l: 'Группы собственников (вычисл.)', t: 'list', ref: 'groups' }, { k: 'cancelReason', l: 'Причина отмены', t: 'text' }, { k: 'comment', l: 'Комментарий', t: 'text' }] },
+  { key: 'salesContracts', name: 'Контракты продажи', sec: 'sales', stage: 'mvp1', desc: 'Продажа металла одного собственника в рамках сделки: списывает металл со счёта и расходует лимит в момент создания.', fields: [{ k: 'id', l: 'Номер', t: 'id', key: true }, { k: 'dealId', l: 'Сделка', t: 'ref', ref: 'deals', key: true }, { k: 'status', l: 'Статус', t: 'enum', vals: 'Заключён · Передан · Получен · Завершена · Отменена', key: true }, { k: 'assetId', l: 'Собственник-продавец', t: 'ref', ref: 'assets', key: true }, { k: 'accountId', l: 'Счёт-источник', t: 'ref', ref: 'accounts', key: true }, { k: 'limitId', l: 'Лимит (расход)', t: 'ref', ref: 'limits', key: true }, { k: 'procContractId', l: 'Договор переработки (объём)', t: 'ref', ref: 'procContracts' }, { k: 'origins', l: 'Строки по происхождению: происхождение · масса ХЧ (деньги — пропорционально массе)', t: 'table', ref: 'assets', key: true }, { k: 'date', l: 'Дата контракта', t: 'date', key: true }, { k: 'mass', l: 'Масса ХЧ, г', t: 'num', key: true }, { k: 'ligMass', l: 'Лигатурная масса, г', t: 'num' }, { k: 'fineness', l: 'Проба', t: 'num' }, { k: 'quote', l: 'Котировка, $/oz', t: 'money' }, { k: 'exchangeQuote', l: 'Биржевая котировка', t: 'money' }, { k: 'discount', l: 'Дисконт, %', t: 'pct' }, { k: 'rate', l: 'Курс ₽/$', t: 'num' }, { k: 'pickupLocId', l: 'Место отгрузки', t: 'ref', ref: 'locations' }, { k: 'carrierId', l: 'Перевозчик', t: 'ref', ref: 'carriers' }, { k: 'logistics', l: 'Чья логистика', t: 'enum' }, { k: 'consigneeId', l: 'Грузополучатель', t: 'ref', ref: 'clients' }, { k: 'payTerms', l: 'Условия оплаты', t: 'enum' }, { k: 'transferDate', l: 'Передано перевозчику', t: 'date' }, { k: 'receivedDate', l: 'Получено покупателем', t: 'date' }, { k: 'giisReported', l: 'Отчёт в ГИИС подан', t: 'date' }, { k: 'cancelReason', l: 'Причина отмены', t: 'text' }, { k: 'groupId', l: 'Группа (вычисл.)', t: 'ref', ref: 'groups' }, { k: 'sourceId', l: 'Происхождение (компания; по умолчанию собственник)', t: 'ref', ref: 'assets' }] },
   { key: 'payments', name: 'Оплаты', sec: 'sales', stage: 'mvp1', desc: 'Плановые и фактические платежи по контракту; покрытие в USD считается по курсу на дату оплаты.', fields: [{ k: 'id', l: 'Номер', t: 'id', key: true }, { k: 'contractId', l: 'Контракт', t: 'ref', ref: 'salesContracts', key: true }, { k: 'dealId', l: 'Сделка', t: 'ref', ref: 'deals' }, { k: 'type', l: 'Тип платежа', t: 'enum', vals: 'аванс · окончательный · полная оплата', key: true }, { k: 'status', l: 'Статус', t: 'enum', vals: 'Планируется · Поступила · Отменена', key: true }, { k: 'planDate', l: 'Дата план', t: 'date', key: true }, { k: 'planUSD', l: 'Сумма план, USD', t: 'money', key: true }, { k: 'planRub', l: 'Сумма план, ₽', t: 'money' }, { k: 'factDate', l: 'Дата факт', t: 'date' }, { k: 'factRub', l: 'Поступило, ₽', t: 'money', key: true }, { k: 'payRate', l: 'Курс на дату оплаты', t: 'num' }, { k: 'rfmReported', l: 'Отчёт в Росфинмониторинг', t: 'date' }, { k: 'assetId', l: 'Собственник', t: 'ref', ref: 'assets' }, { k: 'cancelReason', l: 'Причина отмены', t: 'text' }, { k: 'comment', l: 'Комментарий', t: 'text' }, { k: 'groupId', l: 'Группа (вычисл.)', t: 'ref', ref: 'groups' }] },
 
   /* ---------- учёт металла ---------- */
-  { key: 'accounts', name: 'Аффинажные счета', sec: 'acc', stage: 'mvp1', desc: 'Счёт = собственник × тип × локация × металл. Остаток — вычисляемый (сумма транзакций).', fields: [{ k: 'id', l: 'Номер', t: 'id', key: true }, { k: 'assetId', l: 'Собственник', t: 'ref', ref: 'assets', key: true }, { k: 'type', l: 'Тип счёта', t: 'enum', vals: 'asset · processor · carrier', key: true }, { k: 'locId', l: 'Локация', t: 'ref', ref: 'locations', key: true }, { k: 'metal', l: 'Металл', t: 'ref', ref: 'metals', key: true }, { k: 'balance', l: 'Остаток, г (вычисл.)', t: 'num', key: true }, { k: 'key', l: 'Ключ уникальности', t: 'str' }] },
-  { key: 'transactions', name: 'Транзакции по счетам', sec: 'acc', stage: 'mvp1', desc: 'Движение по счёту. Ровно одно основание: начисление, партия (передел), контракт, перемещение — или корректировка без основания.', fields: [{ k: 'id', l: 'Номер', t: 'id', key: true }, { k: 'accountId', l: 'Счёт', t: 'ref', ref: 'accounts', key: true }, { k: 'type', l: 'Тип', t: 'enum', vals: 'Начисление · Списание · Корректировка', key: true }, { k: 'qty', l: 'Количество, г (±)', t: 'num', key: true }, { k: 'date', l: 'Дата', t: 'date', key: true }, { k: 'accrualId', l: 'Основание: начисление', t: 'ref', ref: 'accruals', key: true }, { k: 'lotId', l: 'Основание: партия', t: 'ref', ref: 'lots' }, { k: 'contractId', l: 'Основание: контракт', t: 'ref', ref: 'salesContracts', key: true }, { k: 'transferId', l: 'Основание: перемещение', t: 'ref', ref: 'transfers' }, { k: 'comment', l: 'Комментарий', t: 'text' }, { k: 'createdAt', l: 'Создано', t: 'dt' }, { k: 'author', l: 'Автор', t: 'ref', ref: 'users' }, { k: 'sourceId', l: 'Происхождение металла', t: 'ref', ref: 'sources' }] },
+  { key: 'accounts', name: 'Аффинажные счета', sec: 'acc', stage: 'mvp1', desc: 'Счёт = собственник × НДС / без НДС × локация (переработчик) × металл. «Без НДС» — собственный металл (происхождение = собственник), «с НДС» — покупной. Остаток — вычисляемый (сумма транзакций).', fields: [{ k: 'id', l: 'Номер', t: 'id', key: true }, { k: 'assetId', l: 'Собственник', t: 'ref', ref: 'assets', key: true }, { k: 'type', l: 'Тип счёта', t: 'enum', vals: 'asset · processor · carrier', key: true }, { k: 'locId', l: 'Локация', t: 'ref', ref: 'locations', key: true }, { k: 'metal', l: 'Металл', t: 'ref', ref: 'metals', key: true }, { k: 'vat', l: 'НДС', t: 'enum', vals: 'без НДС · с НДС', key: true }, { k: 'balance', l: 'Остаток, г (вычисл.)', t: 'num', key: true }, { k: 'key', l: 'Ключ уникальности', t: 'str' }] },
+  { key: 'transactions', name: 'Транзакции по счетам', sec: 'acc', stage: 'mvp1', desc: 'Движение по счёту. Ровно одно основание: начисление, партия (передел), контракт, перемещение — или корректировка без основания.', fields: [{ k: 'id', l: 'Номер', t: 'id', key: true }, { k: 'accountId', l: 'Счёт', t: 'ref', ref: 'accounts', key: true }, { k: 'type', l: 'Тип', t: 'enum', vals: 'Начисление · Списание · Корректировка', key: true }, { k: 'qty', l: 'Количество, г (±)', t: 'num', key: true }, { k: 'date', l: 'Дата', t: 'date', key: true }, { k: 'accrualId', l: 'Основание: начисление', t: 'ref', ref: 'accruals', key: true }, { k: 'lotId', l: 'Основание: партия', t: 'ref', ref: 'lots' }, { k: 'contractId', l: 'Основание: контракт', t: 'ref', ref: 'salesContracts', key: true }, { k: 'transferId', l: 'Основание: перемещение', t: 'ref', ref: 'transfers' }, { k: 'comment', l: 'Комментарий', t: 'text' }, { k: 'createdAt', l: 'Создано', t: 'dt' }, { k: 'author', l: 'Автор', t: 'ref', ref: 'users' }, { k: 'sourceId', l: 'Происхождение (компания; по умолчанию собственник)', t: 'ref', ref: 'assets' }] },
   { key: 'transfers', name: 'Перемещения', sec: 'acc', stage: 'mvp2', desc: 'Перенос металла между локациями одного собственника (завод → склад перевозчика → завод); пара транзакций списание/зачисление.', fields: [{ k: 'id', l: 'Номер', t: 'id', key: true }, { k: 'status', l: 'Статус', t: 'enum', vals: 'Проведено · Отменено', key: true }, { k: 'assetId', l: 'Собственник', t: 'ref', ref: 'assets', key: true }, { k: 'fromLocId', l: 'Откуда', t: 'ref', ref: 'locations', key: true }, { k: 'toLocId', l: 'Куда', t: 'ref', ref: 'locations', key: true }, { k: 'carrierId', l: 'Перевозчик', t: 'ref', ref: 'carriers' }, { k: 'date', l: 'Дата', t: 'date', key: true }, { k: 'ligMass', l: 'Лигатурная масса, г', t: 'num' }, ...METAL_FIELDS('mass', 'масса ХЧ, г'), ...METAL_FIELDS('fineness', 'проба'), ...METAL_FIELDS('limitId', 'лимит (при вывозе с завода)').map(f => ({ ...f, t: 'ref', ref: 'limits' })), ...METAL_FIELDS('procContractId', 'договор переработки').map(f => ({ ...f, t: 'ref', ref: 'procContracts' })), { k: 'cancelReason', l: 'Причина отмены', t: 'text' }, { k: 'comment', l: 'Комментарий', t: 'text' }, { k: 'groupId', l: 'Группа (вычисл.)', t: 'ref', ref: 'groups' }] },
-  { key: 'limits', name: 'Лимиты (лицензии)', sec: 'acc', stage: 'mvp1', desc: 'Разрешённый объём продажи металла собственником за период. Остаток = объём + корректировки − расход контрактов и перемещений.', fields: [{ k: 'id', l: 'Номер', t: 'id', key: true }, { k: 'name', l: 'Название', t: 'str', key: true }, { k: 'status', l: 'Статус', t: 'enum', vals: 'Действует · Архив', key: true }, { k: 'assetId', l: 'Собственник', t: 'ref', ref: 'assets', key: true }, { k: 'metal', l: 'Металл', t: 'ref', ref: 'metals', key: true }, { k: 'dateFrom', l: 'Период с', t: 'date', key: true }, { k: 'dateTo', l: 'Период по', t: 'date' }, { k: 'volume', l: 'Объём, г', t: 'num', key: true }, { k: 'doc', l: 'Документ (лицензия)', t: 'file' }, { k: 'appId', l: 'Заявка на лицензию', t: 'ref', ref: 'licenseApps' }, { k: 'groupId', l: 'Группа (вычисл.)', t: 'ref', ref: 'groups' }] },
+  { key: 'limits', name: 'Лимиты (лицензии)', sec: 'acc', stage: 'mvp1', desc: 'Разрешённый объём продажи металла собственником за период. Считается в лигатурной массе. Остаток = объём + корректировки − расход контрактов и перемещений (по лигатуре).', fields: [{ k: 'id', l: 'Номер', t: 'id', key: true }, { k: 'name', l: 'Название', t: 'str', key: true }, { k: 'status', l: 'Статус', t: 'enum', vals: 'Действует · Архив', key: true }, { k: 'assetId', l: 'Собственник', t: 'ref', ref: 'assets', key: true }, { k: 'metal', l: 'Металл', t: 'ref', ref: 'metals', key: true }, { k: 'dateFrom', l: 'Период с', t: 'date', key: true }, { k: 'dateTo', l: 'Период по', t: 'date' }, { k: 'volume', l: 'Объём (лигатура), г', t: 'num', key: true }, { k: 'doc', l: 'Документ (лицензия)', t: 'file' }, { k: 'appId', l: 'Заявка на лицензию', t: 'ref', ref: 'licenseApps' }, { k: 'groupId', l: 'Группа (вычисл.)', t: 'ref', ref: 'groups' }] },
   { key: 'limitAdjustments', name: 'Корректировки лимитов', sec: 'acc', stage: 'mvp1', desc: 'Увеличение/уменьшение лимита по письму или дополнению к лицензии.', fields: [{ k: 'id', l: 'Номер', t: 'id', key: true }, { k: 'limitId', l: 'Лимит', t: 'ref', ref: 'limits', key: true }, { k: 'qty', l: 'Количество, г (±)', t: 'num', key: true }, { k: 'date', l: 'Дата', t: 'date', key: true }, { k: 'doc', l: 'Документ', t: 'file' }, { k: 'comment', l: 'Основание', t: 'text' }, { k: 'author', l: 'Автор', t: 'ref', ref: 'users' }, { k: 'assetId', l: 'Собственник', t: 'ref', ref: 'assets' }] },
   { key: 'reconciliations', name: 'Акты сверки', sec: 'acc', stage: 'proto', desc: 'Ежемесячная сверка нашего остатка на счёте переработчика с выпиской завода.', fields: [{ k: 'id', l: 'Номер', t: 'id', key: true }, { k: 'accountId', l: 'Счёт', t: 'ref', ref: 'accounts', key: true }, { k: 'period', l: 'Месяц', t: 'str', key: true }, { k: 'ourBalance', l: 'Наш остаток, г', t: 'num', key: true }, { k: 'plantBalance', l: 'Остаток по заводу, г', t: 'num', key: true }, { k: 'diff', l: 'Расхождение, г', t: 'num', key: true }, { k: 'status', l: 'Статус', t: 'enum', vals: 'Сверено · Расхождение', key: true }, { k: 'date', l: 'Дата акта', t: 'date' }, { k: 'doc', l: 'Документ', t: 'file' }, { k: 'comment', l: 'Комментарий', t: 'text' }, { k: 'author', l: 'Автор', t: 'ref', ref: 'users' }, { k: 'assetId', l: 'Собственник', t: 'ref', ref: 'assets' }, { k: 'groupId', l: 'Группа', t: 'ref', ref: 'groups' }] },
 
@@ -4374,7 +4475,7 @@ const ARCH_TABLES = [
   { key: 'comments', name: 'Комментарии', sec: 'sys', stage: 'proto', desc: 'Сообщения пользователей в ленте записи.', fields: [{ k: 'id', l: 'Номер', t: 'id', key: true }, { k: 'kind', l: 'Тип записи', t: 'enum', key: true }, { k: 'objId', l: 'Запись', t: 'str', key: true }, { k: 'user', l: 'Автор', t: 'ref', ref: 'users' }, { k: 'ts', l: 'Момент', t: 'dt' }, { k: 'text', l: 'Текст', t: 'text', key: true }] },
 ];
 const ARCH_BY_KEY = Object.fromEntries(ARCH_TABLES.map(t => [t.key, t]));
-const ARCH_TYPE_LABEL = { id: 'номер', str: 'строка', text: 'текст', date: 'дата', dt: 'дата-время', num: 'число', money: 'сумма', pct: '%', bool: 'да/нет', enum: 'выбор', ref: 'ссылка', list: 'список', file: 'файл' };
+const ARCH_TYPE_LABEL = { id: 'номер', str: 'строка', text: 'текст', date: 'дата', dt: 'дата-время', num: 'число', money: 'сумма', pct: '%', bool: 'да/нет', enum: 'выбор', ref: 'ссылка', list: 'список', file: 'файл', table: 'таблица' };
 
 /* Списки значений (перечисления) */
 const ARCH_LISTS = [
@@ -4392,7 +4493,7 @@ UI.arch = UI.arch || { mode: 'key', links: true, scale: 'fit', focus: null };
 /* колонки схемы: порядок слева направо; секция refs разбита на две колонки */
 const ARCH_COLUMNS = [
   { sec: 'refs', title: 'Справочники', tables: ['groups', 'assets', 'processors', 'carriers', 'locations', 'metals', 'productTypes'] },
-  { sec: 'refs', title: '', tables: ['clients', 'users', 'deliveryTerms', 'arbThresholds', 'calendar', 'sources', 'params', 'lists'] },
+  { sec: 'refs', title: '', tables: ['clients', 'users', 'deliveryTerms', 'arbThresholds', 'calendar', 'params', 'lists'] },
   { sec: 'proc', title: 'Переработка', tables: ['procContracts', 'conditions', 'rules', 'shipments', 'lots', 'accruals'] },
   { sec: 'acc', title: 'Учёт металла', tables: ['accounts', 'transactions', 'transfers', 'limits', 'limitAdjustments', 'reconciliations'] },
   { sec: 'sales', title: 'Реализация', tables: ['deals', 'salesContracts', 'payments'] },
@@ -4470,7 +4571,7 @@ function viewArchitecture() {
   const refTables = ARCH_TABLES.filter(t => t.sec === 'refs');
   const refContent = {
     groups: () => DB.groups.map(g => `${g.name} (${DB.assets.filter(a => a.groupId === g.id).length} акт.)`),
-    assets: () => DB.assets.map(a => `${a.name} · ${group(a.groupId).name}`),
+    assets: () => DB.assets.map(a => `${a.name} · ${a.external ? 'внешний' : 'внутренний'} контур${a.groupId ? ' · ' + group(a.groupId).name : ''}`),
     processors: () => DB.processors.map(p => `${p.name} · ${p.type === 'refinery' ? 'аффинаж' : 'промежуточный'}`),
     carriers: () => DB.carriers.map(c => `${c.name} · ${c.kind === 'regular' ? 'обычный' : 'спец'}`),
     locations: () => ['asset', 'processor', 'carrier'].map(tp => `${{ asset: 'площадки собственников', processor: 'заводы', carrier: 'склады перевозчиков' }[tp]}: ${DB.locations.filter(l => l.type === tp).length}`),
@@ -4573,7 +4674,7 @@ function metalOutputs(from, to, opts = {}) {
   return rows;
 }
 /* свободно сейчас по ключу собственник|завод|металл — остаток аффинажного счёта (контракты уже списаны) */
-function freeNow(assetId, locId, metal) { const acc = findAccountByLoc(assetId, locId, metal); return acc ? acc.balance : 0; }
+function freeNow(assetId, locId, metal) { return r1(sum([false, true].map(v => findAccountByLoc(assetId, locId, metal, v)).filter(Boolean), a => a.balance)); }   // оба счёта: без НДС и с НДС
 function mplanWeeks(from, to, unit) {
   const cols = [];
   if (unit === 'month') { let d = from.slice(0, 7) + '-01'; while (d <= to) { const end = lastDayOfMonth(d.slice(0, 7)); cols.push({ key: d.slice(0, 7), label: MONTHS_SHORT[Number(d.slice(5, 7)) - 1] + ' ' + d.slice(2, 4), from: maxDate(d, from), to: minDate(end, to) }); d = addDays(end, 1); } return cols; }
@@ -4595,7 +4696,7 @@ function viewMetalPlan() {
   const pre = all.filter(r => r.date < from); const rows = all.filter(r => r.date >= from);
   const startLabel = from === DB.today ? 'сейчас' : 'на начало ' + fmtD(from);
   const metals = metalF ? [metalF] : METALS;
-  const assets = DB.assets.filter(a => canSee(a.groupId) && (!assetF || a.id === assetF)).sort((x, y) => x.name.localeCompare(y.name, 'ru'));
+  const assets = ownerAssets().filter(a => canSee(a.groupId) && (!assetF || a.id === assetF)).sort((x, y) => x.name.localeCompare(y.name, 'ru'));
   const refLocs = DB.locations.filter(l => l.type === 'processor' && isRefinery(l.ownerProc));
   // ключи собственник|завод|металл, по которым есть либо остаток, либо выход
   const keys = []; assets.forEach(a => refLocs.forEach(l => metals.forEach(m => { const fn = freeNow(a.id, l.id, m); const preQ = r1(sum(pre.filter(r => r.assetId === a.id && r.locId === l.id && r.metal === m), r => r.qty)); const has = all.some(r => r.assetId === a.id && r.locId === l.id && r.metal === m); if (fn || has) keys.push({ assetId: a.id, locId: l.id, metal: m, freeNow: fn, opening: r1(fn + preQ) }); })));
@@ -4603,7 +4704,7 @@ function viewMetalPlan() {
   const sumQ = (f) => r1(sum(rows.filter(f), r => r.qty));
   const vtabs = `<div class="btn-group">${MPLAN_VARIANTS.map(v => `<button class="btn ${variant === v.key ? 'on' : ''}" data-filter-set="mplan|variant|${v.key}" title="${esc(v.hint)}">${v.label}</button>`).join('')}</div>`;
   const toolbar = `<div class="toolbar" style="margin-bottom:6px">${vtabs}<span class="spacer"></span><label class="small muted">с&nbsp;<input type="date" data-filter="mplan|from" value="${from}" min="${DB.today}"></label><label class="small muted">по&nbsp;<input type="date" data-filter="mplan|to" value="${to}" min="${from}"></label>
-    <select data-filter="mplan|asset"><option value="*">Собственник: все</option>${DB.assets.filter(a => canSee(a.groupId)).map(a => `<option value="${a.id}" ${assetF === a.id ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select>
+    <select data-filter="mplan|asset"><option value="*">Собственник: все</option>${ownerAssets().filter(a => canSee(a.groupId)).map(a => `<option value="${a.id}" ${assetF === a.id ? 'selected' : ''}>${esc(a.name)}</option>`).join('')}</select>
     <select data-filter="mplan|metal"><option value="*">Металл: оба</option>${METALS.map(m => `<option value="${m}" ${metalF === m ? 'selected' : ''}>${m}</option>`).join('')}</select>
     <span class="chip" data-filter-set="mplan|forecast|${withForecast ? 'off' : 'on'}" style="${withForecast ? '' : 'background:var(--grey-bg);color:var(--muted)'}" title="Отгрузки, ещё не принятые заводом: плановые, в пути, прибывшие. Их выход — прогноз от ожидаемой даты приёмки">непринятые отгрузки ${withForecast ? '✓' : '✕'}</span></div>
     <div class="small muted" style="margin-bottom:12px">${esc(MPLAN_VARIANTS.find(v => v.key === variant).hint)}. Только аффинажные заводы. ${withForecast ? 'Строки по непринятым отгрузкам помечены «прогноз».' : 'Непринятые отгрузки выключены — виден только металл по партиям, уже принятым заводом.'}</div>`;
@@ -4659,6 +4760,25 @@ function viewMetalPlan() {
 
 /* ---------- версии прототипа: новая запись добавляется в начало, APP_VERSION = версия первой записи ---------- */
 const CHANGELOG = [
+  { v: '1.9.2', items: [
+    'Аффинажный счёт на площадке актива теперь привязан к конкретной площадке: если металл собственника перемещён на площадку другого актива, для него заводится отдельный счёт (собственник тот же, локация другая)',
+  ] },
+  { v: '1.9.1', items: [
+    'Список аффинажных счетов: «Локация» — название места, где лежит металл; «Тип счёта» — вид этого места: аффинажный завод, промежуточный переработчик, склад спецперевозчика, склад актива. На ключ счёта тип не влияет: счёт множится по четырём параметрам — собственник × НДС / без НДС × локация × металл',
+  ] },
+  { v: '1.9.0', items: [
+    'Один справочник «Компании» вместо «Собственники» + «Происхождение металла»: у компании признак контура — внутренний (актив группы) или внешний. В партии два поля смотрят в этот справочник: «Собственник» и «Происхождение» (у кого металл был раньше; по умолчанию сам собственник). Справочник происхождений и коды убраны',
+    'Аффинажный счёт = собственник × НДС / без НДС × переработчик × металл. Происхождение = собственник → счёт «без НДС»; другая компания → счёт «с НДС». Счёт выбирается автоматически по партии',
+    'Контракт продажи: выбор счёта списания (без НДС / с НДС); для счёта «с НДС» — строки по компаниям-происхождениям. Смешивать собственный и покупной металл в одном контракте нельзя. Предупреждение, если сделка «без НДС», а счёт «с НДС»',
+    'Перемещение: выбор происхождения (перемещается со счёта «без НДС» или «с НДС»)',
+  ] },
+  { v: '1.8.0', items: [
+    'Происхождение металла: вместо текстового «У кого куплено» — добытчик сырья: актив группы (внутригрупповое) или внешний контрагент; тип «своё / внутригрупповое / внешнее» определяется автоматически. Демо: Каменская Падь, код ВГ-015 — руда Лунного ГОКа',
+    'Контракт продажи делится на строки по происхождению: масса по каждой линии, деньги — пропорционально массе. Списание со счёта идёт по линиям происхождения; на карточке контракта — таблица «Происхождение металла». Демо: КП по сделке СД-010 (Р-001 12 кг + ВГ-015 8 кг)',
+    'Новый отчёт «Продажи по происхождению»: свод по добытчику (что идёт в его бюджет) и строки контрактов',
+    'Сделка: поле «База цены» — за грамм ХЧ или за грамм лигатуры; стоимость контрактов считается от выбранной массы. Демо: сделки по серебру — от лигатуры',
+    'Лимит (лицензия) считается в лигатурной массе: расход контрактов и перемещений — по лигатуре',
+  ] },
   { v: '1.7.4', items: [
     'Форма спецификации: вводятся абсолютные значения (лигатура, Au г, Ag г — итог и по каждому собственнику), содержание % и доли собственников — расчётные. Первая строка предзаполнена итогом (один собственник — 100/100 без ввода), добавленные строки пустые и заполняются руками. Контроль: суммы Au г, Ag г и лигатуры по строкам = итог спецификации (зелёное / красное)',
   ] },
@@ -4801,6 +4921,7 @@ const NAV = [
   { href: '#/deals', label: 'Сделки', icon: 'hand', match: /^deals/, cnt: () => vis.deals().filter(d => ['Предварительная', 'Заключена', 'Исполняется'].includes(d.status)).length },
   { href: '#/contracts', label: 'Контракты продажи', icon: 'doc', match: /^contracts/, sub: true },
   { href: '#/payments', label: 'Оплаты', icon: 'wallet', match: /^payments/, sub: true, cnt: () => vis.payments().filter(p => p.status === 'Планируется' && p.planDate < DB.today).length },
+  { href: '#/sales-origin', label: 'Продажи по происхождению', icon: 'bar', match: /^sales-origin/, sub: true },
   { grp: 'После MVP' },
   { href: '#/licenses', label: 'Лицензирование', icon: 'cert', match: /^licenses/, after: true },
   { href: '#/plan', label: 'Планирование', icon: 'cal', match: /^plan/, after: true },
@@ -4824,6 +4945,7 @@ function routeView(r) {
     case 'deals': return r.id ? viewDeal(r.id) : viewDeals();
     case 'contracts': return r.id ? viewContract(r.id) : viewContracts();
     case 'payments': return r.id ? viewPayment(r.id) : viewPayments();
+    case 'sales-origin': return viewSalesOrigin();
     case 'accounts': return r.id ? viewAccount(r.id) : viewAccounts();
     case 'metal-plan': return viewMetalPlan();
     case 'transactions': return viewTransactions();
